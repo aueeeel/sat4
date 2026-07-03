@@ -1979,28 +1979,40 @@ function ArenaScoreboard({ players }: { players: ArenaRoom["players"] }) {
 
 const studyRooms = [
   {
-    id: "silent-sat-hall",
-    title: "Silent SAT Hall",
-    subtitle: "Quiet camera-on room for focused solo practice.",
+    id: "room-1",
+    title: "Room 1",
+    subtitle: "Open camera-only study room.",
     accent: "mint",
   },
   {
-    id: "math-focus-room",
-    title: "Math Focus",
-    subtitle: "Solve Math modules together while staying muted.",
+    id: "room-2",
+    title: "Room 2",
+    subtitle: "Open camera-only study room.",
     accent: "blue",
   },
   {
-    id: "reading-writing-room",
-    title: "Reading & Writing",
-    subtitle: "Shared study space for Verbal practice blocks.",
+    id: "room-3",
+    title: "Room 3",
+    subtitle: "Open camera-only study room.",
     accent: "pink",
   },
   {
-    id: "homework-lounge",
-    title: "Homework Lounge",
-    subtitle: "Open room for accountability and light study.",
+    id: "room-4",
+    title: "Room 4",
+    subtitle: "Open camera-only study room.",
     accent: "purple",
+  },
+  {
+    id: "room-5",
+    title: "Room 5",
+    subtitle: "Open camera-only study room.",
+    accent: "mint",
+  },
+  {
+    id: "room-6",
+    title: "Room 6",
+    subtitle: "Open camera-only study room.",
+    accent: "blue",
   },
 ];
 
@@ -2040,7 +2052,7 @@ function StudyRoomView({ currentUser }: { currentUser: UserProfile }) {
               <span>Live room</span>
               <h2>{activeRoom.title}</h2>
             </div>
-            <p>Mic is hidden and muted. Camera can be enabled inside the room.</p>
+            <p>No moderator needed: the room starts when the first student joins. Mic is hidden and muted.</p>
           </div>
           <iframe
             title={`${activeRoom.title} study room`}
