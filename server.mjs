@@ -296,11 +296,13 @@ const publicQuestion = (question) => ({
 const publicRoom = (room, userId) => {
   const players = getRoomPlayers.all(room.id);
   const questionIds = parseJson(room.question_ids_json, []);
-  const currentQuestionId = questionIds[room.current_index];
+  const userCorrectIds = new Set(
+    questionIds.filter((questionId) => getAnswerRecord.get(room.id, userId, questionId)?.correct)
+  );
+  const userCurrentIndex =
+    room.status === "playing" ? questionIds.findIndex((questionId) => !userCorrectIds.has(questionId)) : room.current_index;
+  const currentQuestionId = userCurrentIndex >= 0 ? questionIds[userCurrentIndex] : undefined;
   const currentQuestion = currentQuestionId ? questionById.get(currentQuestionId) : null;
-  const answers = currentQuestionId
-    ? players.map((player) => getAnswerRecord.get(room.id, player.user_id, currentQuestionId)).filter(Boolean)
-    : [];
   const winner = room.status === "finished" ? [...players].sort((a, b) => b.score - a.score)[0] ?? null : null;
   const sections = normalizeSections(parseJson(room.sections_json, [room.section]), room.section);
   const review = room.status === "finished"
@@ -336,7 +338,7 @@ const publicRoom = (room, userId) => {
     skills: parseJson(room.skills_json, []),
     questionCount: room.question_count,
     status: room.status,
-    currentIndex: room.current_index,
+    currentIndex: userCurrentIndex >= 0 ? userCurrentIndex : questionIds.length,
     totalQuestions: questionIds.length || room.question_count,
     currentQuestion: currentQuestion ? publicQuestion(currentQuestion) : null,
     review,
@@ -345,7 +347,7 @@ const publicRoom = (room, userId) => {
       nickname: player.nickname,
       score: player.score,
       isHost: player.user_id === room.host_user_id,
-      answeredCurrent: answers.some((answer) => answer.user_id === player.user_id && answer.correct),
+      answeredCurrent: questionIds.every((questionId) => getAnswerRecord.get(room.id, player.user_id, questionId)?.correct),
     })),
     winner: winner ? { userId: winner.user_id, nickname: winner.nickname, score: winner.score } : null,
   };
@@ -563,7 +565,8 @@ const server = createServer(async (request, response) => {
       }
 
       const questionIds = parseJson(room.question_ids_json, []);
-      if (questionIds[room.current_index] !== questionId) {
+      const userActiveQuestionId = questionIds.find((id) => !getAnswerRecord.get(roomId, userId, id)?.correct);
+      if (userActiveQuestionId !== questionId) {
         json(response, 409, { error: "This is not the active question." });
         return;
       }
@@ -605,12 +608,21 @@ const server = createServer(async (request, response) => {
       if (correct && scoreAwarded) addPlayerScore.run(scoreAwarded, roomId, userId);
       if (!correct) addPlayerScore.run(-250, roomId, userId);
 
-      const playerCount = countPlayers.get(roomId).count;
-      const correctCount = getCorrectAnswersForQuestion.get(roomId, questionId).count;
-      if (correctCount >= playerCount) {
-        const nextIndex = room.current_index + 1;
-        if (nextIndex >= questionIds.length) finishRoomStatement.run(roomId);
-        else advanceRoomStatement.run(nextIndex, roomId);
+      if (correct) {
+        const players = getRoomPlayers.all(roomId);
+        const everyoneFinished = players.every((arenaPlayer) =>
+          questionIds.every((id) => getAnswerRecord.get(roomId, arenaPlayer.user_id, id)?.correct)
+        );
+        if (everyoneFinished) {
+          finishRoomStatement.run(roomId);
+        } else {
+          const slowestProgress = Math.min(
+            ...players.map((arenaPlayer) =>
+              questionIds.filter((id) => getAnswerRecord.get(roomId, arenaPlayer.user_id, id)?.correct).length
+            )
+          );
+          advanceRoomStatement.run(slowestProgress, roomId);
+        }
       }
 
       json(response, 200, { correct, attempts, scoreAwarded, waitMs: correct ? 0 : 15_000, room: publicRoom(getRoomById.get(roomId), userId) });
