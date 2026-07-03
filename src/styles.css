@@ -2790,6 +2790,16 @@ input:focus {
   border-right: 1px solid #e6e9ee;
 }
 
+.sat-stimulus-image {
+  display: block;
+  width: min(100%, 680px);
+  max-height: 520px;
+  object-fit: contain;
+  margin: 0 auto 22px;
+  border: 0;
+  box-shadow: none;
+}
+
 .sat-passage {
   max-width: 620px;
   margin: 0 auto;

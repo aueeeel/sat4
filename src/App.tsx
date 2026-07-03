@@ -672,6 +672,9 @@ export default function App() {
         <section className={isMathPractice ? "sat-stage math-stage" : "sat-stage"}>
           {!isMathPractice && (
             <article className="sat-reading-pane">
+              {activeQuestion.imagePath && (
+                <img className="sat-stimulus-image" src={activeQuestion.imagePath} alt="SAT table or chart" />
+              )}
               {activePrompt.passage ? (
                 <div className="sat-passage">
                   {activePrompt.passage.split(/\n+/).map((paragraph, index) => (
@@ -698,7 +701,7 @@ export default function App() {
                 <button className="sat-report">Report</button>
               </div>
 
-              {activeQuestion.imagePath && (
+              {isMathPractice && activeQuestion.imagePath && (
                 <img className="question-image sat-question-image" src={activeQuestion.imagePath} alt="SAT math question" />
               )}
               {!activeQuestion.imagePath && <p className="sat-question-text">{activePrompt.questionText}</p>}
