@@ -1,0 +1,1929 @@
+﻿import {
+  BarChart3,
+  Bookmark,
+  BookOpenCheck,
+  Calculator,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  ClipboardCheck,
+  Clock3,
+  DoorOpen,
+  FileText,
+  FileQuestion,
+  Gauge,
+  Highlighter,
+  Home,
+  LibraryBig,
+  NotebookTabs,
+  MoreHorizontal,
+  Rocket,
+  RotateCcw,
+  Search,
+  SlidersHorizontal,
+  Sparkle,
+  Star,
+  Trophy,
+  UserRound,
+  X,
+} from "lucide-react";
+import { CSSProperties, FormEvent, PointerEvent as ReactPointerEvent, ReactNode, useEffect, useMemo, useState } from "react";
+import { questions, sourceNote } from "./data/questions";
+import vocabularyData from "./data/vocabulary.json";
+import {
+  answerArenaQuestion,
+  clearStoredUser,
+  configureArenaRoom,
+  createArenaRoom,
+  getAnswers,
+  getArenaRoom,
+  getStoredUser,
+  joinArenaRoom,
+  loginUser,
+  registerUser,
+  resetAnswers,
+  saveAnswer,
+  saveStoredUser,
+  startArenaRoom,
+  type ArenaRoom,
+} from "./storage";
+import type { AnswerRecord, Difficulty, Question, Section, UserProfile } from "./types";
+
+const sections: Section[] = ["Verbal", "Math"];
+const verbalDomains = ["Information and Ideas", "Craft and Structure", "Expression of Ideas", "Standard English Conventions"];
+const verbalModules: Record<string, string[]> = {
+  "Information and Ideas": ["Central Ideas and Details", "Inferences", "Command of Evidence"],
+  "Expression of Ideas": ["Rhetorical Synthesis", "Transitions"],
+  "Craft and Structure": ["Cross-Text Connections", "Text Structure and Purpose", "Words in Context"],
+  "Standard English Conventions": ["Boundaries", "Form, Structure, and Sense"],
+};
+const mathDomains = ["Algebra", "Advanced Math", "Problem-Solving and Data Analysis", "Geometry and Trigonometry"];
+const mathModules: Record<string, string[]> = {
+  Algebra: [
+    "Linear equations in one variable",
+    "Linear functions",
+    "Linear equations in two variables",
+    "Systems of two linear equations in two variables",
+    "Linear inequalities in one or two variables",
+  ],
+  "Advanced Math": [
+    "Equivalent expressions",
+    "Nonlinear equations in one variable and systems of equations in two variables",
+    "Nonlinear functions",
+  ],
+  "Problem-Solving and Data Analysis": [
+    "Ratios, rates, proportional relationships, and units",
+    "Percentages",
+    "One-variable data: Distributions and measures of center and spread",
+    "Two-variable data: Models and scatterplots",
+    "Probability and conditional probability",
+    "Inference from sample statistics and margin of error",
+    "Evaluating statistical claims: Observational studies and experiments",
+  ],
+  "Geometry and Trigonometry": ["Area and volume", "Lines, angles, and triangles", "Right triangles and trigonometry", "Circles"],
+};
+type VocabularyCard = {
+  word: string;
+  meaning: string;
+  example: string;
+  source?: string;
+};
+
+const vocabularyCards = vocabularyData as VocabularyCard[];
+const difficulties: Array<Difficulty | "All"> = ["All", "Easy", "Medium", "Hard"];
+
+const unique = (items: string[]) => Array.from(new Set(items));
+const domainKey = (question: Pick<Question, "section" | "domain">) => `${question.section}::${question.domain}`;
+const topicKey = (question: Pick<Question, "section" | "domain" | "skill">) =>
+  `${question.section}::${question.domain}::${question.skill}`;
+const sectionLabel = (section: Section) => (section === "Verbal" ? "Reading & Writing" : "Math");
+const formatTimer = (seconds: number) => {
+  const minutes = Math.floor(seconds / 60).toString().padStart(2, "0");
+  const remainder = (seconds % 60).toString().padStart(2, "0");
+  return `${minutes}:${remainder}`;
+};
+
+const normalizeAnswer = (value: string) =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/[в€’вЂ“вЂ”]/g, "-")
+    .replace(/\s+/g, "")
+    .replace(/^0+(?=\d)/, "");
+
+const parseAcceptedAnswers = (question: Question) => {
+  if (question.acceptedAnswers?.length) return question.acceptedAnswers;
+  const match = question.explanation.match(/Correct answer:\s*([^.]*)\./i);
+  if (!match) return [];
+  return match[1].split(/,|\bor\b/i).map((item) => item.trim()).filter(Boolean);
+};
+
+const answersMatch = (studentAnswer: string, acceptedAnswer: string) => {
+  const student = normalizeAnswer(studentAnswer);
+  const accepted = normalizeAnswer(acceptedAnswer);
+  if (!student || !accepted) return false;
+  if (student === accepted) return true;
+  const studentNumber = Number(student);
+  const acceptedNumber = Number(accepted);
+  return Number.isFinite(studentNumber) && Number.isFinite(acceptedNumber) && Math.abs(studentNumber - acceptedNumber) < 0.0005;
+};
+
+type ActionBarItem = {
+  id: string;
+  label: string;
+  icon: ReactNode;
+  onClick: () => void;
+  active?: boolean;
+  badge?: string;
+};
+
+const splitPrompt = (prompt: string) => {
+  const trimmed = prompt.trim();
+  const questionStart = Math.max(
+    trimmed.lastIndexOf("\nWhich "),
+    trimmed.lastIndexOf("\nWhat "),
+    trimmed.lastIndexOf("\nBased on "),
+    trimmed.lastIndexOf("\nAccording to "),
+    trimmed.lastIndexOf("\nWhich choice ")
+  );
+
+  if (questionStart <= 0) {
+    return { passage: "", questionText: trimmed };
+  }
+
+  return {
+    passage: trimmed.slice(0, questionStart).trim(),
+    questionText: trimmed.slice(questionStart).trim(),
+  };
+};
+
+export default function App() {
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => getStoredUser());
+  const [authMode, setAuthMode] = useState<"sign-in" | "sign-up">("sign-up");
+  const [authError, setAuthError] = useState("");
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authDialogOpen, setAuthDialogOpen] = useState(false);
+  const [answersVersion, setAnswersVersion] = useState(0);
+  const [activeSection, setActiveSection] = useState<Section>("Verbal");
+  const [bankView, setBankView] = useState<"home" | "topics" | "vocabulary" | "arena">("home");
+  const [activeDomain, setActiveDomain] = useState("All");
+  const [activeSkill, setActiveSkill] = useState("All");
+  const [activeDifficulty, setActiveDifficulty] = useState<Difficulty | "All">("All");
+  const [query, setQuery] = useState("");
+  const [activeQuestionId, setActiveQuestionId] = useState(questions[0].id);
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const [freeResponseValue, setFreeResponseValue] = useState("");
+  const [openExplanationIds, setOpenExplanationIds] = useState<string[]>([]);
+  const [practiceMode, setPracticeMode] = useState(false);
+  const [calculatorOpen, setCalculatorOpen] = useState(false);
+  const [calculatorDragging, setCalculatorDragging] = useState(false);
+  const [calculatorFrame, setCalculatorFrame] = useState({ x: 920, y: 92, width: 430, height: 540 });
+  const [practiceStartedAt, setPracticeStartedAt] = useState(Date.now());
+  const [currentTime, setCurrentTime] = useState(Date.now());
+
+  const answers = useMemo(() => (currentUser ? getAnswers(currentUser.id) : []), [currentUser, answersVersion]);
+  const currentQuestionIds = useMemo(() => new Set(questions.map((question) => question.id)), []);
+  const currentAnswers = useMemo(
+    () => answers.filter((answer) => currentQuestionIds.has(answer.questionId)),
+    [answers, currentQuestionIds]
+  );
+  const answerMap = useMemo(() => new Map(currentAnswers.map((answer) => [answer.questionId, answer])), [currentAnswers]);
+
+  useEffect(() => {
+    if (!practiceMode) return;
+    const timer = window.setInterval(() => setCurrentTime(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [practiceMode]);
+
+  const domains = useMemo(
+    () => [
+      "All",
+      ...(activeSection === "Verbal"
+        ? verbalDomains
+        : mathDomains),
+    ],
+    [activeSection]
+  );
+
+  const modules = useMemo(() => {
+    if (activeSection === "Verbal") {
+      const domainModules =
+        activeDomain === "All" ? Object.values(verbalModules).flat() : verbalModules[activeDomain] ?? [];
+      return ["All", ...domainModules];
+    }
+    const domainModules = activeDomain === "All" ? Object.values(mathModules).flat() : mathModules[activeDomain] ?? [];
+    return ["All", ...domainModules];
+  }, [activeDomain, activeSection]);
+
+  const filteredQuestions = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    return questions.filter((question) => {
+      const matchesSection = question.section === activeSection;
+      const matchesDomain = activeDomain === "All" || question.domain === activeDomain;
+      const matchesSkill = activeSkill === "All" || question.skill === activeSkill;
+      const matchesDifficulty = activeDifficulty === "All" || question.difficulty === activeDifficulty;
+      const matchesQuery =
+        !normalizedQuery ||
+        [question.prompt, question.domain, question.skill].some((value) => value.toLowerCase().includes(normalizedQuery));
+      return matchesSection && matchesDomain && matchesSkill && matchesDifficulty && matchesQuery;
+    });
+  }, [activeDifficulty, activeDomain, activeSection, activeSkill, query]);
+
+  const activeQuestion = filteredQuestions.find((question) => question.id === activeQuestionId) ?? filteredQuestions[0] ?? null;
+  const activeAnswer = activeQuestion ? answerMap.get(activeQuestion.id) : undefined;
+  const explanationOpen = activeQuestion ? openExplanationIds.includes(activeQuestion.id) : false;
+  const filteredAnsweredCount = filteredQuestions.filter((question) => answerMap.has(question.id)).length;
+  const sessionComplete = filteredQuestions.length > 0 && filteredAnsweredCount === filteredQuestions.length;
+  const activeQuestionIndex = activeQuestion ? filteredQuestions.findIndex((question) => question.id === activeQuestion.id) : -1;
+  const activePrompt = activeQuestion ? splitPrompt(activeQuestion.prompt) : null;
+
+  const domainProgress = useMemo(() => {
+    return questions.reduce<Record<string, { answered: number; total: number }>>((progress, question) => {
+      const key = domainKey(question);
+      const current = progress[key] ?? { answered: 0, total: 0 };
+      progress[key] = {
+        answered: current.answered + (answerMap.has(question.id) ? 1 : 0),
+        total: current.total + 1,
+      };
+      return progress;
+    }, {});
+  }, [answerMap]);
+
+  const topicProgress = useMemo(() => {
+    return questions.reduce<Record<string, { answered: number; total: number }>>((progress, question) => {
+      const key = topicKey(question);
+      const current = progress[key] ?? { answered: 0, total: 0 };
+      progress[key] = {
+        answered: current.answered + (answerMap.has(question.id) ? 1 : 0),
+        total: current.total + 1,
+      };
+      return progress;
+    }, {});
+  }, [answerMap]);
+
+  const skillProgress = useMemo(() => {
+    return questions.reduce<Record<string, { answered: number; total: number }>>((progress, question) => {
+      const key = `${question.section}::${question.skill}`;
+      const current = progress[key] ?? { answered: 0, total: 0 };
+      progress[key] = {
+        answered: current.answered + (answerMap.has(question.id) ? 1 : 0),
+        total: current.total + 1,
+      };
+      return progress;
+    }, {});
+  }, [answerMap]);
+
+  const sectionStats = sections.map((section) => {
+    const sectionQuestions = questions.filter((question) => question.section === section);
+    const answered = sectionQuestions.filter((question) => answerMap.has(question.id));
+    const correct = answered.filter((question) => answerMap.get(question.id)?.correct);
+    return {
+      section,
+      total: sectionQuestions.length,
+      answered: answered.length,
+      correct: correct.length,
+      accuracy: answered.length ? Math.round((correct.length / answered.length) * 100) : 0,
+    };
+  });
+
+  const totalAnswered = currentAnswers.length;
+  const totalCorrect = currentAnswers.filter((answer) => answer.correct).length;
+  const totalAccuracy = totalAnswered ? Math.round((totalCorrect / totalAnswered) * 100) : 0;
+  const practiceTimer = formatTimer(Math.floor((currentTime - practiceStartedAt) / 1000));
+
+  const getQuestionSet = (section: Section, domain = "All", skill = "All") =>
+    questions.filter((question) => {
+      const matchesSection = question.section === section;
+      const matchesDomain = domain === "All" || question.domain === domain;
+      const matchesSkill = skill === "All" || question.skill === skill;
+      return matchesSection && matchesDomain && matchesSkill;
+    });
+
+  const getPracticeStats = (questionSet: Question[]) => {
+    const answered = questionSet.filter((question) => answerMap.has(question.id));
+    const correct = answered.filter((question) => answerMap.get(question.id)?.correct);
+    return {
+      total: questionSet.length,
+      answered: answered.length,
+      correct: correct.length,
+      accuracy: answered.length ? Math.round((correct.length / answered.length) * 100) : null,
+    };
+  };
+
+  const groupedTopics = useMemo(() => {
+    if (activeSection === "Verbal") {
+      return verbalDomains.map((domain) => ({
+        domain,
+        modules: verbalModules[domain] ?? [],
+      }));
+    }
+
+    return mathDomains.map((domain) => ({
+      domain,
+      modules: mathModules[domain] ?? [],
+    }));
+  }, [activeSection]);
+
+  const domainStats = unique(questions.map((question) => question.domain)).map((domain) => {
+    const domainQuestions = questions.filter((question) => question.domain === domain);
+    const answered = domainQuestions.filter((question) => answerMap.has(question.id));
+    const correct = answered.filter((question) => answerMap.get(question.id)?.correct);
+    return {
+      domain,
+      section: domainQuestions[0].section,
+      total: domainQuestions.length,
+      answered: answered.length,
+      correct: correct.length,
+      percent: domainQuestions.length ? Math.round((correct.length / domainQuestions.length) * 100) : 0,
+    };
+  });
+
+  const handleAuth = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const fullName = String(form.get("fullName") ?? "").trim();
+    const nickname = String(form.get("nickname") ?? "").trim();
+    const age = Number(form.get("age") ?? 0);
+    const gmail = String(form.get("gmail") ?? "").trim().toLowerCase();
+    const password = String(form.get("password") ?? "");
+
+    setAuthError("");
+    setAuthLoading(true);
+
+    try {
+      const user =
+        authMode === "sign-up"
+          ? await registerUser({ fullName, nickname, age, gmail, password })
+          : await loginUser({ gmail, password });
+
+      saveStoredUser(user);
+      setCurrentUser(user);
+      setAuthDialogOpen(false);
+    } catch (error) {
+      if (error instanceof TypeError) {
+        setAuthError("API server is not running. Start the site with npm run dev.");
+        return;
+      }
+      setAuthError(error instanceof Error ? error.message : "Something went wrong.");
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const submitAnswer = (question: Question, choiceIndex: number) => {
+    if (!currentUser) return;
+    const record: AnswerRecord = {
+      questionId: question.id,
+      selectedIndex: choiceIndex,
+      correct: choiceIndex === question.correctIndex,
+      answeredAt: new Date().toISOString(),
+    };
+    setSelectedIndex(choiceIndex);
+    saveAnswer(currentUser.id, record);
+    setAnswersVersion((value) => value + 1);
+  };
+
+  const submitFreeResponse = (question: Question) => {
+    if (!currentUser) return;
+    const acceptedAnswers = parseAcceptedAnswers(question);
+    const correct = acceptedAnswers.some((answer) => answersMatch(freeResponseValue, answer));
+    const record: AnswerRecord = {
+      questionId: question.id,
+      selectedIndex: 0,
+      freeResponse: freeResponseValue.trim(),
+      correct,
+      answeredAt: new Date().toISOString(),
+    };
+    setSelectedIndex(0);
+    saveAnswer(currentUser.id, record);
+    setAnswersVersion((value) => value + 1);
+  };
+
+  const changeSection = (section: Section) => {
+    setActiveSection(section);
+    setActiveDomain("All");
+    setActiveSkill("All");
+    setActiveDifficulty("All");
+    const firstQuestion = questions.find((question) => question.section === section);
+    if (firstQuestion) setActiveQuestionId(firstQuestion.id);
+    setSelectedIndex(null);
+    setFreeResponseValue("");
+  };
+
+  const toggleExplanation = (questionId: string) => {
+    setOpenExplanationIds((ids) => (ids.includes(questionId) ? ids.filter((id) => id !== questionId) : [...ids, questionId]));
+  };
+
+  const changeDomain = (domain: string) => {
+    setActiveDomain(domain);
+    setActiveSkill("All");
+    const firstQuestion = questions.find((question) => {
+      const matchesSection = question.section === activeSection;
+      const matchesDomain = domain === "All" || question.domain === domain;
+      return matchesSection && matchesDomain;
+    });
+    if (firstQuestion) setActiveQuestionId(firstQuestion.id);
+    setSelectedIndex(null);
+    setFreeResponseValue("");
+  };
+
+  const changeSkill = (skill: string) => {
+    setActiveSkill(skill);
+    const firstQuestion = questions.find((question) => {
+      const matchesSection = question.section === activeSection;
+      const matchesDomain = activeDomain === "All" || question.domain === activeDomain;
+      const matchesSkill = skill === "All" || question.skill === skill;
+      return matchesSection && matchesDomain && matchesSkill;
+    });
+    if (firstQuestion) setActiveQuestionId(firstQuestion.id);
+    setSelectedIndex(null);
+    setFreeResponseValue("");
+  };
+
+  const startPractice = (section: Section, domain = "All", skill = "All") => {
+    const sessionQuestions = getQuestionSet(section, domain, skill);
+    const firstQuestion = sessionQuestions[0];
+    if (!firstQuestion) return;
+
+    setActiveSection(section);
+    setActiveDomain(domain);
+    setActiveSkill(skill);
+    setActiveDifficulty("All");
+    setQuery("");
+    setActiveQuestionId(firstQuestion.id);
+    setSelectedIndex(answerMap.get(firstQuestion.id)?.selectedIndex ?? null);
+    setFreeResponseValue(answerMap.get(firstQuestion.id)?.freeResponse ?? "");
+    setCalculatorOpen(false);
+    setPracticeStartedAt(Date.now());
+    setCurrentTime(Date.now());
+    setPracticeMode(true);
+  };
+
+  const goToQuestionIndex = (index: number) => {
+    const nextQuestion = filteredQuestions[index];
+    if (!nextQuestion) return;
+    const answer = answerMap.get(nextQuestion.id);
+    setActiveQuestionId(nextQuestion.id);
+    setSelectedIndex(answer?.selectedIndex ?? null);
+    setFreeResponseValue(answer?.freeResponse ?? "");
+    setPracticeStartedAt(Date.now());
+    setCurrentTime(Date.now());
+  };
+
+  const moveCalculator = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!calculatorDragging) return;
+    setCalculatorFrame((frame) => ({
+      ...frame,
+      x: Math.max(8, Math.min(window.innerWidth - 120, frame.x + event.movementX)),
+      y: Math.max(82, Math.min(window.innerHeight - 90, frame.y + event.movementY)),
+    }));
+  };
+
+  const signOut = () => {
+    clearStoredUser();
+    setCurrentUser(null);
+  };
+
+  const openAuthDialog = (mode: "sign-in" | "sign-up") => {
+    setAuthMode(mode);
+    setAuthError("");
+    setAuthDialogOpen(true);
+  };
+
+  if (!currentUser) {
+    return (
+      <main className="auth-shell auth-shell-warp">
+        <WarpBackground className="auth-warp-background">
+          <nav className="top-nav auth-top-nav">
+            <div className="brand">
+              <img className="brand-logo" src="/brand/4sat-logo.png" alt="4sat logo" />
+              <span>4sat</span>
+            </div>
+            <div className="auth-nav-actions">
+              <button className="ghost-button" onClick={() => openAuthDialog("sign-in")}>
+                Войти
+              </button>
+              <button className="primary-button" onClick={() => openAuthDialog("sign-up")}>
+                Создать аккаунт
+              </button>
+            </div>
+          </nav>
+
+          <section className="auth-hero">
+            <div className="award-pill">
+              <Rocket size={18} />
+              SAT practice workspace
+            </div>
+            <h1>Digital SAT practice workspace</h1>
+          </section>
+
+          {authDialogOpen && (
+            <div className="auth-dialog-backdrop" role="presentation" onMouseDown={() => setAuthDialogOpen(false)}>
+              <section className="auth-dialog" role="dialog" aria-modal="true" aria-label="Authentication" onMouseDown={(event) => event.stopPropagation()}>
+              <header className="auth-dialog-header">
+                <div>
+                  <p className="eyebrow">{authMode === "sign-up" ? "New student" : "Welcome back"}</p>
+                  <h2>{authMode === "sign-up" ? "Create your account" : "Sign in to 4sat"}</h2>
+                </div>
+                <button className="auth-dialog-close" onClick={() => setAuthDialogOpen(false)} aria-label="Close authentication dialog">
+                  <X size={18} />
+                </button>
+              </header>
+              <div className="auth-dialog-body">
+                <form onSubmit={handleAuth}>
+                  {authMode === "sign-up" && (
+                    <>
+                      <input name="fullName" placeholder="Full name" autoComplete="name" />
+                      <input name="nickname" placeholder="Nickname" autoComplete="nickname" />
+                      <input name="age" placeholder="Age" type="number" min="5" max="99" autoComplete="off" />
+                    </>
+                  )}
+                  <input name="gmail" placeholder="Gmail" type="email" autoComplete="username" />
+                  <input
+                    name="password"
+                    placeholder="Password"
+                    type="password"
+                    autoComplete={authMode === "sign-up" ? "new-password" : "current-password"}
+                  />
+                  {authError && <p className="form-error">{authError}</p>}
+                  <button className="primary-button full" type="submit" disabled={authLoading}>
+                    {authLoading ? "Please wait..." : authMode === "sign-up" ? "Create account" : "Sign in"}
+                  </button>
+                </form>
+              </div>
+              <footer className="auth-dialog-footer">
+                <span>{authMode === "sign-up" ? "Already have an account?" : "New to 4sat?"}</span>
+                <button
+                  className="ghost-button"
+                  onClick={() => {
+                    setAuthMode(authMode === "sign-up" ? "sign-in" : "sign-up");
+                    setAuthError("");
+                  }}
+                >
+                  {authMode === "sign-up" ? "Sign in" : "Create account"}
+                </button>
+              </footer>
+              </section>
+            </div>
+          )}
+        </WarpBackground>
+      </main>
+    );
+  }
+
+  if (practiceMode && activeQuestion && activePrompt) {
+    const isMathPractice = activeQuestion.section === "Math";
+    const isFreeResponse = activeQuestion.choices.length === 1 && activeQuestion.correctIndex === 0 && activeQuestion.acceptedAnswers?.length;
+
+    return (
+      <main className={isMathPractice ? "practice-shell math-practice-shell" : "practice-shell"}>
+        <header className="sat-topbar">
+          <button
+            className="sat-back"
+            onClick={() => {
+              setCalculatorOpen(false);
+              setPracticeMode(false);
+            }}
+          >
+            <ChevronLeft size={16} />
+            Go back
+          </button>
+          <button className="sat-directions">Directions</button>
+          <div className="sat-timer" aria-label="Practice timer">
+            <strong>{practiceTimer}</strong>
+            <button>Hide</button>
+          </div>
+          <div className="sat-tools">
+            <button>
+              <Highlighter size={15} />
+              Highlight
+            </button>
+            {isMathPractice && (
+              <>
+                <button onClick={() => setCalculatorOpen((open) => !open)}>
+                  <Calculator size={15} />
+                  Calculator
+                </button>
+                <button>
+                  <FileText size={15} />
+                  Reference
+                </button>
+              </>
+            )}
+            <button>
+              <MoreHorizontal size={17} />
+              More
+            </button>
+          </div>
+        </header>
+
+        {isMathPractice && calculatorOpen && (
+          <aside
+            className="calculator-popover"
+            aria-label="Desmos calculator"
+            style={{ left: calculatorFrame.x, top: calculatorFrame.y, width: calculatorFrame.width, height: calculatorFrame.height }}
+          >
+            <div
+              className="calculator-header"
+              onPointerDown={(event) => {
+                setCalculatorDragging(true);
+                event.currentTarget.setPointerCapture(event.pointerId);
+              }}
+              onPointerMove={moveCalculator}
+              onPointerUp={(event) => {
+                setCalculatorDragging(false);
+                event.currentTarget.releasePointerCapture(event.pointerId);
+              }}
+              onPointerCancel={() => setCalculatorDragging(false)}
+            >
+              <strong>Desmos Calculator</strong>
+              <button onClick={() => setCalculatorOpen(false)}>Close</button>
+            </div>
+            <iframe title="Desmos calculator" src="https://www.desmos.com/calculator" />
+          </aside>
+        )}
+
+        <section className={isMathPractice ? "sat-stage math-stage" : "sat-stage"}>
+          {!isMathPractice && (
+            <article className="sat-reading-pane">
+              {activePrompt.passage ? (
+                <div className="sat-passage">
+                  {activePrompt.passage.split(/\n+/).map((paragraph, index) => (
+                    <p key={`${activeQuestion.id}-passage-${index}`}>{paragraph}</p>
+                  ))}
+                </div>
+              ) : (
+                <div className="sat-passage sat-passage-empty">
+                  <Clock3 size={22} />
+                  <p>This question does not include a separate reading passage.</p>
+                </div>
+              )}
+            </article>
+          )}
+
+          <article className="sat-question-pane">
+            <div className="sat-question-card">
+              <div className="sat-question-top">
+                <span className="sat-number">{activeQuestionIndex + 1}</span>
+                <button className="sat-review">
+                  <Bookmark size={15} />
+                  Mark for Review
+                </button>
+                <button className="sat-report">Report</button>
+              </div>
+
+              {activeQuestion.imagePath && (
+                <img className="question-image sat-question-image" src={activeQuestion.imagePath} alt="SAT math question" />
+              )}
+              {!activeQuestion.imagePath && <p className="sat-question-text">{activePrompt.questionText}</p>}
+
+              {isFreeResponse ? (
+                <div className={activeAnswer ? (activeAnswer.correct ? "sat-free-response correct" : "sat-free-response wrong") : "sat-free-response"}>
+                  <input
+                    value={freeResponseValue}
+                    onChange={(event) => setFreeResponseValue(event.target.value)}
+                    placeholder="Answer..."
+                    aria-label="Math answer"
+                  />
+                  <button onClick={() => submitFreeResponse(activeQuestion)} disabled={!freeResponseValue.trim()}>
+                    {activeAnswer ? (activeAnswer.correct ? "Correct" : "Try again") : "Check answer"}
+                  </button>
+                </div>
+              ) : (
+                <div className="sat-choices">
+                  {activeQuestion.choices.map((choice, index) => {
+                    const answered = activeAnswer || selectedIndex !== null;
+                    const isCorrect = index === activeQuestion.correctIndex;
+                    const isSelected = (activeAnswer?.selectedIndex ?? selectedIndex) === index;
+                    const showCorrect = (isSelected && isCorrect) || (sessionComplete && isCorrect);
+                    const choiceImage = activeQuestion.choiceImagePaths?.[index];
+                    return (
+                      <button
+                        key={`${activeQuestion.id}-${choice}`}
+                        className={[
+                          "sat-choice",
+                          isSelected ? "selected" : "",
+                          showCorrect ? "correct" : "",
+                          answered && isSelected && !isCorrect ? "wrong" : "",
+                        ].join(" ")}
+                        onClick={() => submitAnswer(activeQuestion, index)}
+                      >
+                        <span>{String.fromCharCode(65 + index)}</span>
+                        {choiceImage && choice.startsWith("Choice ") ? (
+                          <img className="sat-choice-image" src={choiceImage} alt={`Choice ${String.fromCharCode(65 + index)}`} />
+                        ) : (
+                          <em>{choice}</em>
+                        )}
+                        {showCorrect && <Check size={18} />}
+                        {answered && isSelected && !isCorrect && <X size={18} />}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {explanationOpen && (
+                <div className={activeAnswer?.correct ? "sat-explanation correct" : "sat-explanation"}>
+                  <strong>{activeAnswer ? (activeAnswer.correct ? "Correct" : "Review this one") : "Explanation"}</strong>
+                  {activeAnswer?.correct || sessionComplete ? (
+                    <p>{activeQuestion.explanation}</p>
+                  ) : (
+                    <p>Explanation and the correct answer unlock after you finish this practice set.</p>
+                  )}
+                </div>
+              )}
+            </div>
+          </article>
+        </section>
+
+        <footer className="sat-footer">
+          <div className="sat-footer-left">
+            <QuestionPagination
+              currentIndex={activeQuestionIndex}
+              total={filteredQuestions.length}
+              onGoTo={goToQuestionIndex}
+            />
+          </div>
+          <div className="sat-footer-actions">
+            <button
+              className="sat-nav-button"
+              disabled={activeQuestionIndex <= 0}
+              onClick={() => goToQuestionIndex(activeQuestionIndex - 1)}
+            >
+              Previous
+            </button>
+            <button className="sat-explanation-button" onClick={() => toggleExplanation(activeQuestion.id)}>
+              Explanation
+            </button>
+            <button
+              className="sat-next-button"
+              disabled={activeQuestionIndex < 0 || activeQuestionIndex >= filteredQuestions.length - 1}
+              onClick={() => goToQuestionIndex(activeQuestionIndex + 1)}
+            >
+              Next
+            </button>
+          </div>
+        </footer>
+      </main>
+    );
+  }
+
+  return (
+    <main className="app-shell">
+      <nav className="top-nav app-nav">
+        <button
+          className="brand nav-brand"
+          onClick={() => {
+            setBankView("home");
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+        >
+          <img className="brand-logo" src="/brand/4sat-logo.png" alt="4sat logo" />
+          <span>4sat</span>
+        </button>
+        <ExpandableActionBar
+          items={[
+            {
+              id: "dashboard",
+              label: "Dashboard",
+              icon: <Home size={17} />,
+              active: bankView === "home",
+              onClick: () => {
+                setBankView("home");
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              },
+            },
+            {
+              id: "bank",
+              label: "Question Bank",
+              icon: <LibraryBig size={17} />,
+              active: bankView === "topics",
+              badge: String(sectionStats.find((stat) => stat.section === activeSection)?.answered ?? 0),
+              onClick: () => {
+                setBankView("home");
+                window.setTimeout(() => document.getElementById("bank")?.scrollIntoView({ behavior: "smooth" }), 0);
+              },
+            },
+            {
+              id: "vocabulary",
+              label: "Vocabulary",
+              icon: <NotebookTabs size={17} />,
+              active: bankView === "vocabulary",
+              onClick: () => {
+                setBankView("vocabulary");
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              },
+            },
+            {
+              id: "arena",
+              label: "Arena",
+              icon: <Trophy size={17} />,
+              active: bankView === "arena",
+              onClick: () => {
+                setBankView("arena");
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              },
+            },
+          ]}
+        />
+        <button className="profile-button" onClick={signOut} title="Sign out">
+          <UserRound size={18} />
+          <span>{currentUser.name}</span>
+          <DoorOpen size={16} />
+        </button>
+      </nav>
+
+      {bankView === "arena" ? (
+        <ArenaView currentUser={currentUser} />
+      ) : bankView === "vocabulary" ? (
+        <VocabularyView />
+      ) : bankView === "home" ? (
+        <>
+          <WarpBackground>
+            <section id="dashboard" className="dashboard">
+              <div className="dashboard-copy">
+                <p className="eyebrow">4sat practice workspace</p>
+                <h1>{currentUser.name}, prepare smarter for the Digital SAT.</h1>
+                <p>
+                  Choose Reading & Writing or Math, practice focused question-bank modules, and track progress automatically.
+                </p>
+              </div>
+              <div className="stats-strip" aria-label="Overall progress">
+                <Metric icon={<ClipboardCheck size={20} />} label="Answered" value={`${totalAnswered}/${questions.length}`} />
+                <Metric icon={<Gauge size={20} />} label="Accuracy" value={`${totalAccuracy}%`} />
+                <Metric icon={<Trophy size={20} />} label="Correct" value={String(totalCorrect)} />
+              </div>
+            </section>
+          </WarpBackground>
+
+          <section id="bank" className="question-bank-home">
+            <div className="bank-title">
+              <LibraryBig size={24} />
+              <h2>Question Bank</h2>
+            </div>
+            <div className="bank-cards">
+              {sectionStats.map((stat) => (
+                <article key={stat.section} className={`bank-card ${stat.section === "Verbal" ? "reading" : "math"}`}>
+                  <div>
+                    <h3>{sectionLabel(stat.section)}</h3>
+                    <p>{stat.total} questions</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      changeSection(stat.section);
+                      setBankView("topics");
+                      window.scrollTo({ top: 0, behavior: "smooth" });
+                    }}
+                  >
+                    Open
+                    <ChevronRight size={14} />
+                  </button>
+                </article>
+              ))}
+            </div>
+          </section>
+        </>
+      ) : (
+        <section id="topics" className="topic-page">
+          <button
+            className="topic-back"
+            onClick={() => {
+              setBankView("home");
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+          >
+            <ChevronLeft size={16} />
+            Question Bank
+          </button>
+
+          <div className="topic-board">
+            <div className="topic-toolbar">
+              <h2>{sectionLabel(activeSection)}</h2>
+              <div className="topic-actions">
+                <button>
+                  <SlidersHorizontal size={14} />
+                  Filters
+                </button>
+                <button>
+                  <MoreHorizontal size={15} />
+                  More options
+                </button>
+              </div>
+            </div>
+
+            <article className="practice-all-card">
+              <div>
+                <strong>Practice all topics</strong>
+                <span>Start practicing all {groupedTopics.reduce((count, group) => count + group.modules.length, 0)} skills in {sectionLabel(activeSection)}.</span>
+              </div>
+              <button onClick={() => startPractice(activeSection)}>Start practice</button>
+            </article>
+
+            <div className="topic-table">
+              <div className="topic-table-head">
+                <span>Topic</span>
+                <span>Progress</span>
+                <span>Accuracy</span>
+              </div>
+              {groupedTopics.map((group) => (
+                <div className="topic-group" key={group.domain}>
+                  <h3>{group.domain}</h3>
+                  {group.modules.map((module) => {
+                    const moduleQuestions = getQuestionSet(activeSection, group.domain, module);
+                    const stats = getPracticeStats(moduleQuestions);
+                    const progressPercent = stats.total ? Math.round((stats.answered / stats.total) * 100) : 0;
+                    return (
+                      <button
+                        key={`${group.domain}-${module}`}
+                        className="topic-row-card"
+                        disabled={!stats.total}
+                        onClick={() => startPractice(activeSection, group.domain, module)}
+                      >
+                        <span className="topic-name">
+                          <i />
+                          <strong>{module}</strong>
+                        </span>
+                        <span className="topic-progress">
+                          <span className="mini-progress">
+                            <span style={{ width: `${progressPercent}%` }} />
+                          </span>
+                          <em>{stats.answered}/{stats.total}</em>
+                        </span>
+                        <span className="topic-accuracy">
+                          {stats.accuracy === null ? (
+                            <em>-</em>
+                          ) : (
+                            <>
+                              <i />
+                              <strong>{stats.accuracy}%</strong>
+                            </>
+                          )}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      <section className="module-switch legacy-module-switch" aria-label="SAT sections">
+        {sectionStats.map((stat) => (
+          <button
+            key={stat.section}
+            className={activeSection === stat.section ? "module-card active" : "module-card"}
+            onClick={() => changeSection(stat.section)}
+          >
+            <span>{stat.section}</span>
+            <strong>{stat.answered}/{stat.total}</strong>
+            <small>{stat.accuracy}% accuracy</small>
+          </button>
+        ))}
+      </section>
+
+      <section id="legacy-bank" className="workspace legacy-workspace">
+        <aside className="bank-sidebar">
+          <div className="sidebar-title">
+            <SlidersHorizontal size={18} />
+            <span>Question Bank</span>
+          </div>
+          <div className="search-box">
+            <Search size={18} />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search skill or prompt" />
+          </div>
+          <div className="filter-group">
+            <p>Domain</p>
+            {domains.map((domain) => (
+              <button
+                key={domain}
+                className={activeDomain === domain ? "filter-choice active" : "filter-choice"}
+                onClick={() => changeDomain(domain)}
+              >
+                <span>{domain}</span>
+                <small>
+                  {domain === "All"
+                    ? `${sectionStats.find((stat) => stat.section === activeSection)?.answered ?? 0}/${
+                        sectionStats.find((stat) => stat.section === activeSection)?.total ?? 0
+                      } done`
+                    : `${domainProgress[`${activeSection}::${domain}`]?.answered ?? 0}/${
+                        domainProgress[`${activeSection}::${domain}`]?.total ?? 0
+                      } done`}
+                </small>
+              </button>
+            ))}
+          </div>
+          <div className="filter-group">
+            <p>Module</p>
+            {modules.map((module) => (
+              <button
+                key={module}
+                className={activeSkill === module ? "filter-choice active" : "filter-choice"}
+                onClick={() => changeSkill(module)}
+              >
+                <span>{module}</span>
+                <small>
+                  {module === "All"
+                    ? `${filteredAnsweredCount}/${filteredQuestions.length} done`
+                    : `${skillProgress[`${activeSection}::${module}`]?.answered ?? 0}/${
+                        skillProgress[`${activeSection}::${module}`]?.total ?? 0
+                      } done`}
+                </small>
+              </button>
+            ))}
+          </div>
+          <div className="filter-group">
+            <p>Difficulty</p>
+            <div className="difficulty-grid">
+              {difficulties.map((difficulty) => (
+                <button
+                  key={difficulty}
+                  className={activeDifficulty === difficulty ? "chip active" : "chip"}
+                  onClick={() => setActiveDifficulty(difficulty)}
+                >
+                  {difficulty}
+                </button>
+              ))}
+            </div>
+          </div>
+        </aside>
+
+        <section className="question-list" aria-label="Filtered questions">
+          <div className="section-header">
+            <div>
+              <p className="eyebrow">{activeSection}</p>
+              <h2>{filteredAnsweredCount}/{filteredQuestions.length} done</h2>
+            </div>
+            <button
+              className="icon-button"
+              title="Reset progress"
+              onClick={() => {
+                resetAnswers(currentUser.id);
+                setSelectedIndex(null);
+                setAnswersVersion((value) => value + 1);
+              }}
+            >
+              <RotateCcw size={18} />
+            </button>
+          </div>
+          {filteredQuestions.length > 0 && (
+            <div className="question-map" aria-label="Question navigation">
+              {filteredQuestions.map((question, index) => {
+                const answer = answerMap.get(question.id);
+                const statusClass = answer ? (answer.correct ? "correct" : "wrong") : "unanswered";
+                return (
+                  <button
+                    key={question.id}
+                    className={[
+                      "question-map-cell",
+                      statusClass,
+                      activeQuestion?.id === question.id ? "active" : "",
+                    ].join(" ")}
+                    onClick={() => goToQuestionIndex(index)}
+                    title={`Question ${index + 1}`}
+                  >
+                    {index + 1}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          <div className="question-items">
+            {filteredQuestions.length === 0 && (
+              <div className="empty-list">
+                <strong>No questions in this topic yet</strong>
+                <small>Upload this subtopic PDF and it will fill this list.</small>
+              </div>
+            )}
+            {filteredQuestions.map((question, questionIndex) => {
+              const answer = answerMap.get(question.id);
+              const progress = topicProgress[topicKey(question)] ?? { answered: 0, total: 0 };
+              return (
+                <button
+                  key={question.id}
+                    className={activeQuestion?.id === question.id ? "question-row active" : "question-row"}
+                  onClick={() => {
+                    setActiveQuestionId(question.id);
+                    setSelectedIndex(answer?.selectedIndex ?? null);
+                  }}
+                  >
+                  <span className={answer ? (answer.correct ? "status-dot correct" : "status-dot wrong") : "status-dot"} />
+                  <span>
+                    <strong>Question {questionIndex + 1}: {question.skill}</strong>
+                    <small>{question.domain} В· {question.difficulty} В· {progress.answered}/{progress.total} done</small>
+                  </span>
+                  <ChevronRight size={16} />
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="practice-panel" aria-label="Practice question">
+          {activeQuestion ? (
+            <>
+              <div className="difficulty-label">{activeQuestion.difficulty} question</div>
+              <div className="practice-meta">
+                <span>{activeQuestion.domain}</span>
+                <span>{activeQuestion.skill}</span>
+                {activeQuestion.estimatedTimeSeconds && <span>{activeQuestion.estimatedTimeSeconds}s</span>}
+              </div>
+              <div className="question-prompt">
+                {activeQuestion.imagePath && (
+                  <img className="question-image" src={activeQuestion.imagePath} alt="SAT math question" />
+                )}
+                {activePrompt?.passage && <p className="prompt-passage">{activePrompt.passage}</p>}
+                <p className="prompt-question">{activePrompt?.questionText}</p>
+              </div>
+              <div className="choices">
+                {activeQuestion.choices.map((choice, index) => {
+                  const answered = activeAnswer || selectedIndex !== null;
+                  const isCorrect = index === activeQuestion.correctIndex;
+                  const isSelected = (activeAnswer?.selectedIndex ?? selectedIndex) === index;
+                  const showCorrect = (isSelected && isCorrect) || (sessionComplete && isCorrect);
+                  return (
+                    <button
+                      key={choice}
+                      className={[
+                        "choice",
+                        isSelected ? "selected" : "",
+                        showCorrect ? "correct" : "",
+                        answered && isSelected && !isCorrect ? "wrong" : "",
+                      ].join(" ")}
+                      onClick={() => submitAnswer(activeQuestion, index)}
+                    >
+                      <span>{String.fromCharCode(65 + index)}</span>
+                      {choice}
+                      {showCorrect && <Check size={18} />}
+                      {answered && isSelected && !isCorrect && <X size={18} />}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="question-actions">
+                <button
+                  className="secondary-button compact"
+                  disabled={activeQuestionIndex <= 0}
+                  onClick={() => goToQuestionIndex(activeQuestionIndex - 1)}
+                >
+                  Previous question
+                </button>
+                <button className="explanation-toggle" onClick={() => toggleExplanation(activeQuestion.id)}>
+                  {explanationOpen ? "Hide explanation" : "Explanation"}
+                </button>
+                <button
+                  className="primary-button compact"
+                  disabled={activeQuestionIndex < 0 || activeQuestionIndex >= filteredQuestions.length - 1}
+                  onClick={() => goToQuestionIndex(activeQuestionIndex + 1)}
+                >
+                  Next question
+                </button>
+              </div>
+              {explanationOpen && (
+                <div className={activeAnswer?.correct ? "explanation correct" : "explanation"}>
+                  <strong>{activeAnswer ? (activeAnswer.correct ? "Correct" : "Review this one") : "Explanation"}</strong>
+                  {activeAnswer?.correct || sessionComplete ? (
+                    <p>{activeQuestion.explanation}</p>
+                  ) : (
+                    <p>Explanation and the correct answer unlock after you finish this practice set.</p>
+                  )}
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="empty-state">
+              <FileQuestion size={32} />
+              <h2>No questions yet</h2>
+              <p>This topic is ready. Add a PDF export and the questions will appear here.</p>
+            </div>
+          )}
+        </section>
+      </section>
+
+      <section id="progress" className="progress-section">
+        <div className="section-header">
+          <div>
+            <p className="eyebrow">Skill map</p>
+            <h2>Progress by domain</h2>
+          </div>
+          <div className="source-note">
+            <Sparkle size={16} />
+            <span>{sourceNote}</span>
+          </div>
+        </div>
+        <div className="progress-grid">
+          {domainStats.map((stat) => (
+            <article key={stat.domain} className="progress-card">
+              <div>
+                <p>{stat.section}</p>
+                <h3>{stat.domain}</h3>
+              </div>
+              <div className="progress-line" aria-label={`${stat.domain} progress`}>
+                <span style={{ width: `${stat.percent}%` }} />
+              </div>
+              <small>{stat.correct} correct В· {stat.answered}/{stat.total} answered</small>
+            </article>
+          ))}
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function Metric({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
+  return (
+    <div className="metric">
+      {icon}
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function WarpBackground({ children, className = "" }: { children: ReactNode; className?: string }) {
+  const beams = [
+    { x: 12, delay: "0s", duration: "4.8s", color: "#39b7ff" },
+    { x: 34, delay: "-1.6s", duration: "5.6s", color: "#a855f7" },
+    { x: 58, delay: "-2.7s", duration: "4.2s", color: "#22c55e" },
+    { x: 82, delay: "-3.4s", duration: "5.1s", color: "#fb7185" },
+  ];
+
+  return (
+    <div className={["warp-background", className].filter(Boolean).join(" ")}>
+      <div className="warp-scene" aria-hidden="true">
+        {["top", "bottom", "left", "right"].map((side) => (
+          <div key={side} className={`warp-plane ${side}`}>
+            {beams.map((beam, index) => (
+              <span
+                key={`${side}-${index}`}
+                className="warp-beam"
+                style={
+                  {
+                    "--beam-x": `${beam.x}%`,
+                    "--beam-delay": beam.delay,
+                    "--beam-duration": beam.duration,
+                    "--beam-color": beam.color,
+                } as CSSProperties
+                }
+              />
+            ))}
+          </div>
+        ))}
+      </div>
+      <div className="warp-content">{children}</div>
+    </div>
+  );
+}
+
+function QuestionPagination({
+  currentIndex,
+  total,
+  onGoTo,
+}: {
+  currentIndex: number;
+  total: number;
+  onGoTo: (index: number) => void;
+}) {
+  const currentPage = currentIndex + 1;
+  const pages = Array.from(
+    new Set([1, currentPage - 1, currentPage, currentPage + 1, total].filter((page) => page >= 1 && page <= total))
+  );
+
+  return (
+    <nav className="question-pagination" aria-label="Question pagination">
+      <button className="question-page-nav" disabled={currentPage <= 1} onClick={() => onGoTo(currentIndex - 1)}>
+        <ChevronLeft size={16} />
+        Previous
+      </button>
+      <div className="question-page-links">
+        {pages.map((page, index) => (
+          <FragmentedPageButton
+            key={page}
+            page={page}
+            previousPage={pages[index - 1]}
+            active={page === currentPage}
+            onClick={() => onGoTo(page - 1)}
+          />
+        ))}
+      </div>
+      <button className="question-page-nav" disabled={currentPage >= total} onClick={() => onGoTo(currentIndex + 1)}>
+        Next
+        <ChevronRight size={16} />
+      </button>
+    </nav>
+  );
+}
+
+function FragmentedPageButton({
+  page,
+  previousPage,
+  active,
+  onClick,
+}: {
+  page: number;
+  previousPage?: number;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <>
+      {previousPage && page - previousPage > 1 && <span className="question-page-ellipsis">...</span>}
+      <button className={active ? "question-page-link active" : "question-page-link"} onClick={onClick}>
+        {page}
+      </button>
+    </>
+  );
+}
+
+function ArenaView({ currentUser }: { currentUser: UserProfile }) {
+  const [room, setRoom] = useState<ArenaRoom | null>(null);
+  const [arenaMode, setArenaMode] = useState<"create" | "join">("create");
+  const [roomPassword, setRoomPassword] = useState("");
+  const [joinCode, setJoinCode] = useState("");
+  const [arenaError, setArenaError] = useState("");
+  const [arenaLoading, setArenaLoading] = useState(false);
+  const [selectedSections, setSelectedSections] = useState<Section[]>(["Math"]);
+  const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
+  const [maxPlayers, setMaxPlayers] = useState(2);
+  const [questionCount, setQuestionCount] = useState(10);
+  const [questionStartedAt, setQuestionStartedAt] = useState(Date.now());
+  const [freeResponse, setFreeResponse] = useState("");
+  const [arenaFeedback, setArenaFeedback] = useState("");
+
+  const selectedModuleGroups = useMemo(
+    () =>
+      selectedSections.flatMap((section) =>
+        (section === "Math" ? mathDomains : verbalDomains).map((domain) => ({
+          section,
+          domain,
+          skills: (section === "Math" ? mathModules : verbalModules)[domain] ?? [],
+        }))
+      ),
+    [selectedSections]
+  );
+  const skillOptions = useMemo(() => selectedModuleGroups.flatMap((group) => group.skills), [selectedModuleGroups]);
+  const currentArenaQuestion = room?.currentQuestion;
+  const currentArenaPrompt = currentArenaQuestion ? splitPrompt(currentArenaQuestion.prompt) : null;
+  const selfPlayer = room?.players.find((player) => player.userId === currentUser.id);
+  const sortedPlayers = [...(room?.players ?? [])].sort((a, b) => b.score - a.score);
+  const isFreeResponseArena = Boolean(currentArenaQuestion && currentArenaQuestion.choices.length <= 1);
+
+  useEffect(() => {
+    if (!room || room.status === "finished") return;
+    const timer = window.setInterval(async () => {
+      try {
+        setRoom(await getArenaRoom(room.id, currentUser.id));
+      } catch {
+        // Keep the local room state if polling briefly fails.
+      }
+    }, 1500);
+    return () => window.clearInterval(timer);
+  }, [currentUser.id, room]);
+
+  useEffect(() => {
+    if (!room) return;
+    setSelectedSections(room.sections?.length ? room.sections : room.section === "Mixed" ? ["Math", "Verbal"] : [room.section]);
+    setSelectedSkills(room.skills);
+    setMaxPlayers(room.maxPlayers);
+    setQuestionCount(room.questionCount);
+  }, [room?.id]);
+
+  useEffect(() => {
+    setQuestionStartedAt(Date.now());
+    setFreeResponse("");
+    setArenaFeedback("");
+  }, [currentArenaQuestion?.id]);
+
+  const toggleArenaSkill = (skill: string) => {
+    setSelectedSkills((current) => (current.includes(skill) ? current.filter((item) => item !== skill) : [...current, skill]));
+  };
+
+  const toggleArenaSection = (section: Section) => {
+    setSelectedSections((current) => {
+      const next = current.includes(section) ? current.filter((item) => item !== section) : [...current, section];
+      return next.length ? next : [section];
+    });
+    setSelectedSkills([]);
+  };
+
+  const selectAllArenaSkills = () => setSelectedSkills(skillOptions);
+  const clearArenaSkills = () => setSelectedSkills([]);
+
+  const runArenaAction = async (action: () => Promise<ArenaRoom>) => {
+    setArenaError("");
+    setArenaLoading(true);
+    try {
+      setRoom(await action());
+    } catch (error) {
+      setArenaError(error instanceof Error ? error.message : "Arena action failed.");
+    } finally {
+      setArenaLoading(false);
+    }
+  };
+
+  const createRoom = () =>
+    runArenaAction(() =>
+      createArenaRoom({
+        userId: currentUser.id,
+        nickname: currentUser.nickname || currentUser.name,
+        password: roomPassword,
+        maxPlayers,
+        sections: selectedSections,
+        domains: [],
+        skills: selectedSkills,
+        questionCount,
+      })
+    );
+
+  const joinRoom = () =>
+    runArenaAction(() =>
+      joinArenaRoom({
+        userId: currentUser.id,
+        nickname: currentUser.nickname || currentUser.name,
+        code: joinCode,
+        password: roomPassword,
+      })
+    );
+
+  const saveArenaConfig = () =>
+    room &&
+    runArenaAction(() =>
+      configureArenaRoom({
+        roomId: room.id,
+        userId: currentUser.id,
+        maxPlayers,
+        sections: selectedSections,
+        domains: [],
+        skills: selectedSkills,
+        questionCount,
+      })
+    );
+
+  const startArena = () => room && runArenaAction(() => startArenaRoom({ roomId: room.id, userId: currentUser.id }));
+
+  const submitArenaAnswer = async (selectedIndex?: number) => {
+    if (!room || !currentArenaQuestion || selfPlayer?.answeredCurrent) return;
+    setArenaLoading(true);
+    setArenaError("");
+    try {
+      const result = await answerArenaQuestion({
+        roomId: room.id,
+        userId: currentUser.id,
+        questionId: currentArenaQuestion.id,
+        selectedIndex,
+        freeResponse: selectedIndex === undefined ? freeResponse : undefined,
+        elapsedMs: Date.now() - questionStartedAt,
+      });
+      setRoom(result.room);
+      setArenaFeedback(result.correct ? `Correct +${result.scoreAwarded}` : `Wrong. Try again, -250 next correct score.`);
+    } catch (error) {
+      setArenaError(error instanceof Error ? error.message : "Could not submit answer.");
+    } finally {
+      setArenaLoading(false);
+    }
+  };
+
+  if (!room) {
+    return (
+      <section className="arena-page">
+        <div className="arena-hero">
+          <p className="eyebrow">4sat Arena</p>
+          <h1>Play SAT battles with friends.</h1>
+          <p>Create a private room, choose Math or Reading & Writing modules, and race through random questions.</p>
+        </div>
+        <div className="arena-entry-grid">
+          <article className={arenaMode === "create" ? "arena-entry-card active" : "arena-entry-card"}>
+            <button onClick={() => setArenaMode("create")}>Create room</button>
+            <p>Host chooses question type, modules, player limit, and starts the match.</p>
+          </article>
+          <article className={arenaMode === "join" ? "arena-entry-card active" : "arena-entry-card"}>
+            <button onClick={() => setArenaMode("join")}>Join room</button>
+            <p>Enter a code and password from your friend to join the lobby.</p>
+          </article>
+        </div>
+        <div className="arena-panel">
+          {arenaMode === "join" && <input value={joinCode} onChange={(event) => setJoinCode(event.target.value.toUpperCase())} placeholder="Room code" />}
+          <input value={roomPassword} onChange={(event) => setRoomPassword(event.target.value)} placeholder="Room password" />
+          {arenaMode === "create" && (
+            <ArenaSettings
+              selectedSections={selectedSections}
+              toggleSection={toggleArenaSection}
+              maxPlayers={maxPlayers}
+              setMaxPlayers={setMaxPlayers}
+              questionCount={questionCount}
+              setQuestionCount={setQuestionCount}
+              skillOptions={skillOptions}
+              moduleGroups={selectedModuleGroups}
+              selectedSkills={selectedSkills}
+              toggleSkill={toggleArenaSkill}
+              selectAllSkills={selectAllArenaSkills}
+              clearSkills={clearArenaSkills}
+            />
+          )}
+          {arenaError && <p className="form-error">{arenaError}</p>}
+          <button className="primary-button full" onClick={arenaMode === "create" ? createRoom : joinRoom} disabled={arenaLoading}>
+            {arenaLoading ? "Loading..." : arenaMode === "create" ? "Create arena" : "Join arena"}
+          </button>
+        </div>
+      </section>
+    );
+  }
+
+  if (room.status === "waiting") {
+    return (
+      <section className="arena-page">
+        <div className="arena-lobby-head">
+          <div>
+            <p className="eyebrow">Lobby</p>
+            <h1>Room {room.code}</h1>
+            <span>{room.players.length}/{room.maxPlayers} players</span>
+          </div>
+          <button className="ghost-button" onClick={() => setRoom(null)}>Leave</button>
+        </div>
+        <div className="arena-layout">
+          <ArenaScoreboard players={sortedPlayers} />
+          <div className="arena-panel">
+            {room.isHost ? (
+              <>
+                <ArenaSettings
+                  selectedSections={selectedSections}
+                  toggleSection={toggleArenaSection}
+                  maxPlayers={maxPlayers}
+                  setMaxPlayers={setMaxPlayers}
+                  questionCount={questionCount}
+                  setQuestionCount={setQuestionCount}
+                  skillOptions={skillOptions}
+                  moduleGroups={selectedModuleGroups}
+                  selectedSkills={selectedSkills}
+                  toggleSkill={toggleArenaSkill}
+                  selectAllSkills={selectAllArenaSkills}
+                  clearSkills={clearArenaSkills}
+                />
+                {arenaError && <p className="form-error">{arenaError}</p>}
+                <div className="arena-actions">
+                  <button className="ghost-button" onClick={saveArenaConfig} disabled={arenaLoading}>Save settings</button>
+                  <button className="primary-button" onClick={startArena} disabled={arenaLoading || room.players.length < 2}>
+                    {room.players.length < 2 ? "Need 2 players" : "Start game"}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="arena-waiting">
+                <Rocket size={28} />
+                <h2>Waiting for host</h2>
+                <p>The host will choose modules and start the game.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="arena-page">
+      <div className="arena-lobby-head">
+        <div>
+          <p className="eyebrow">{room.status === "finished" ? "Results" : `Question ${room.currentIndex + 1}/${room.totalQuestions}`}</p>
+          <h1>{room.status === "finished" ? `${room.winner?.nickname ?? "Winner"} wins` : "Arena live"}</h1>
+        </div>
+        <button className="ghost-button" onClick={() => setRoom(null)}>Exit arena</button>
+      </div>
+      <div className="arena-layout">
+        <ArenaScoreboard players={sortedPlayers} />
+        {room.status === "finished" ? (
+          <div className="arena-panel arena-winner">
+            <Trophy size={42} />
+            <h2>{room.winner?.nickname} scored {room.winner?.score}</h2>
+            <p>Final leaderboard is locked. Create a new room for another battle.</p>
+          </div>
+        ) : currentArenaQuestion && currentArenaPrompt ? (
+          <div className="arena-question-card">
+            <div className="arena-question-meta">
+              <span>{currentArenaQuestion.section}</span>
+              <span>{currentArenaQuestion.skill}</span>
+              <span>{currentArenaQuestion.difficulty}</span>
+            </div>
+            {currentArenaPrompt.passage && <p className="prompt-passage">{currentArenaPrompt.passage}</p>}
+            {currentArenaQuestion.imagePath && <img className="question-image" src={currentArenaQuestion.imagePath} alt="Arena SAT question" />}
+            <p className="prompt-question">{currentArenaPrompt.questionText}</p>
+            {isFreeResponseArena ? (
+              <div className="arena-free-response">
+                <input value={freeResponse} onChange={(event) => setFreeResponse(event.target.value)} placeholder="Answer..." />
+                <button className="primary-button" onClick={() => submitArenaAnswer()} disabled={arenaLoading || selfPlayer?.answeredCurrent}>Submit</button>
+              </div>
+            ) : (
+              <div className="arena-choices">
+                {currentArenaQuestion.choices.map((choice, index) => (
+                  <button key={`${currentArenaQuestion.id}-${index}`} onClick={() => submitArenaAnswer(index)} disabled={arenaLoading || selfPlayer?.answeredCurrent}>
+                    <span>{String.fromCharCode(65 + index)}</span>
+                    {currentArenaQuestion.choiceImagePaths?.[index] && choice.startsWith("Choice ") ? (
+                      <img className="sat-choice-image" src={currentArenaQuestion.choiceImagePaths[index]} alt={`Choice ${String.fromCharCode(65 + index)}`} />
+                    ) : (
+                      <em>{choice}</em>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+            {arenaFeedback && <p className="arena-feedback">{arenaFeedback}</p>}
+            {arenaError && <p className="form-error">{arenaError}</p>}
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function ArenaSettings({
+  selectedSections,
+  toggleSection,
+  maxPlayers,
+  setMaxPlayers,
+  questionCount,
+  setQuestionCount,
+  skillOptions,
+  moduleGroups,
+  selectedSkills,
+  toggleSkill,
+  selectAllSkills,
+  clearSkills,
+}: {
+  selectedSections: Section[];
+  toggleSection: (section: Section) => void;
+  maxPlayers: number;
+  setMaxPlayers: (value: number) => void;
+  questionCount: number;
+  setQuestionCount: (value: number) => void;
+  skillOptions: string[];
+  moduleGroups: Array<{ section: Section; domain: string; skills: string[] }>;
+  selectedSkills: string[];
+  toggleSkill: (skill: string) => void;
+  selectAllSkills: () => void;
+  clearSkills: () => void;
+}) {
+  const [openGroups, setOpenGroups] = useState<string[]>(() => moduleGroups.slice(0, 2).map((group) => `${group.section}-${group.domain}`));
+
+  useEffect(() => {
+    setOpenGroups((current) => {
+      const validKeys = moduleGroups.map((group) => `${group.section}-${group.domain}`);
+      const next = current.filter((key) => validKeys.includes(key));
+      return next.length ? next : validKeys.slice(0, 2);
+    });
+  }, [moduleGroups]);
+
+  const toggleGroup = (key: string) => {
+    setOpenGroups((current) => (current.includes(key) ? current.filter((item) => item !== key) : [...current, key]));
+  };
+
+  return (
+    <div className="arena-settings">
+      <div className="arena-setting-row">
+        <button className={selectedSections.includes("Math") ? "chip active" : "chip"} onClick={() => toggleSection("Math")}>Math</button>
+        <button className={selectedSections.includes("Verbal") ? "chip active" : "chip"} onClick={() => toggleSection("Verbal")}>Reading & Writing</button>
+      </div>
+      <div className="arena-setting-row">
+        <label>Players<input type="number" min="2" max="5" value={maxPlayers} onChange={(event) => setMaxPlayers(Number(event.target.value))} /></label>
+        <label>Questions<input type="number" min="3" max="30" value={questionCount} onChange={(event) => setQuestionCount(Number(event.target.value))} /></label>
+      </div>
+      <div className="arena-module-toolbar">
+        <button className="ghost-button" onClick={selectAllSkills}>Select all modules</button>
+        <button className="ghost-button" onClick={clearSkills}>Clear</button>
+        <span>{selectedSkills.length}/{skillOptions.length} selected</span>
+      </div>
+      <div className="arena-accordion">
+        {moduleGroups.map((group) => {
+          const key = `${group.section}-${group.domain}`;
+          const open = openGroups.includes(key);
+          const selectedInGroup = group.skills.filter((skill) => selectedSkills.includes(skill)).length;
+          return (
+            <article key={key} className={open ? "arena-accordion-item open" : "arena-accordion-item"}>
+              <button className="arena-accordion-trigger" onClick={() => toggleGroup(key)}>
+                <span>{group.section}</span>
+                <strong>{group.domain}</strong>
+                <em>{selectedInGroup}/{group.skills.length}</em>
+                <ChevronRight size={17} />
+              </button>
+              <div className="arena-accordion-content">
+                {group.skills.map((skill) => (
+                  <button key={`${key}-${skill}`} className={selectedSkills.includes(skill) ? "arena-skill active" : "arena-skill"} onClick={() => toggleSkill(skill)}>
+                    {skill}
+                  </button>
+                ))}
+              </div>
+            </article>
+          );
+        })}
+      </div>
+      <small>{selectedSkills.length ? "Only selected modules will be used." : "No module selected = all modules in selected sections."}</small>
+    </div>
+  );
+}
+
+function ArenaScoreboard({ players }: { players: ArenaRoom["players"] }) {
+  return (
+    <aside className="arena-scoreboard">
+      <h2>Leaderboard</h2>
+      {players.map((player, index) => (
+        <div key={player.userId} className="arena-player-row">
+          <span>{index + 1}</span>
+          <strong>{player.nickname}{player.isHost ? " · host" : ""}</strong>
+          <em>{player.score}</em>
+          <i className={player.answeredCurrent ? "ready" : ""} />
+        </div>
+      ))}
+    </aside>
+  );
+}
+
+function VocabularyView() {
+  const pageSize = 60;
+  const [page, setPage] = useState(1);
+  const [flippedCards, setFlippedCards] = useState<string[]>([]);
+  const [vocabMode, setVocabMode] = useState<"all" | "favorites">("all");
+  const [favoriteWords, setFavoriteWords] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const saved = window.localStorage.getItem("4sat:vocabulary:favorites");
+      return saved ? (JSON.parse(saved) as string[]) : [];
+    } catch {
+      return [];
+    }
+  });
+  const favoriteSet = useMemo(() => new Set(favoriteWords), [favoriteWords]);
+  const activeVocabularyCards = useMemo(
+    () => (vocabMode === "favorites" ? vocabularyCards.filter((card) => favoriteSet.has(card.word.toLowerCase())) : vocabularyCards),
+    [favoriteSet, vocabMode]
+  );
+  const totalPages = Math.max(1, Math.ceil(activeVocabularyCards.length / pageSize));
+  const start = (page - 1) * pageSize;
+  const visibleCards = activeVocabularyCards.slice(start, start + pageSize);
+  const visiblePages = Array.from({ length: totalPages }, (_, index) => index + 1).filter(
+    (pageNumber) => pageNumber === 1 || pageNumber === totalPages || Math.abs(pageNumber - page) <= 1
+  );
+
+  useEffect(() => {
+    window.localStorage.setItem("4sat:vocabulary:favorites", JSON.stringify(favoriteWords));
+  }, [favoriteWords]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
+  const changePage = (nextPage: number) => {
+    const safePage = Math.min(Math.max(nextPage, 1), totalPages);
+    setPage(safePage);
+    setFlippedCards([]);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const toggleCard = (key: string) => {
+    setFlippedCards((current) => (current.includes(key) ? current.filter((item) => item !== key) : [...current, key]));
+  };
+
+  const changeVocabMode = (mode: "all" | "favorites") => {
+    setVocabMode(mode);
+    setPage(1);
+    setFlippedCards([]);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const toggleFavorite = (word: string) => {
+    const key = word.toLowerCase();
+    setFavoriteWords((current) => (current.includes(key) ? current.filter((item) => item !== key) : [...current, key]));
+  };
+
+  return (
+    <section className="vocab-page">
+      <div className="vocab-mini-tabs" aria-label="Vocabulary filters">
+        <button className={vocabMode === "all" ? "active" : ""} onClick={() => changeVocabMode("all")}>
+          All words
+        </button>
+        <button className={vocabMode === "favorites" ? "active" : ""} onClick={() => changeVocabMode("favorites")}>
+          <Star size={14} />
+          Favorites
+          <span>{favoriteWords.length}</span>
+        </button>
+      </div>
+
+      <div className="vocab-toolbar">
+        <span>
+          {activeVocabularyCards.length ? `${start + 1}-${Math.min(start + pageSize, activeVocabularyCards.length)}` : "0"}
+        </span>
+        <strong>{activeVocabularyCards.length} words</strong>
+      </div>
+
+      <div className="vocab-grid" aria-label="SAT vocabulary flashcards">
+        {visibleCards.map((card, index) => {
+          const key = `${card.word}-${start + index}`;
+          const isFlipped = flippedCards.includes(key);
+          const isFavorite = favoriteSet.has(card.word.toLowerCase());
+
+          return (
+            <article key={key} className={isFlipped ? "vocab-card flipped" : "vocab-card"}>
+              <button
+                className={isFavorite ? "vocab-favorite active" : "vocab-favorite"}
+                onClick={() => toggleFavorite(card.word)}
+                aria-label={isFavorite ? `Remove ${card.word} from favorites` : `Add ${card.word} to favorites`}
+              >
+                <Star size={16} />
+              </button>
+              <button
+                className="vocab-card-flip"
+                onClick={() => toggleCard(key)}
+                aria-label={isFlipped ? `Hide meaning for ${card.word}` : `Show meaning for ${card.word}`}
+              >
+                <span className="vocab-card-inner">
+                  <span className="vocab-card-face vocab-card-front">
+                    <strong>{card.word}</strong>
+                  </span>
+                  <span className="vocab-card-face vocab-card-back">
+                    <strong>{card.word}</strong>
+                    <span>{card.meaning}</span>
+                    <em>{card.example}</em>
+                  </span>
+                </span>
+              </button>
+            </article>
+          );
+        })}
+      </div>
+
+      {!visibleCards.length && (
+        <div className="vocab-empty">
+          <Star size={22} />
+          <strong>No favorite words yet</strong>
+          <span>Tap the star on any card to save it here.</span>
+        </div>
+      )}
+
+      <nav className="vocab-pagination" aria-label="Vocabulary pages">
+        <button className="vocab-page-nav" disabled={page === 1} onClick={() => changePage(page - 1)}>
+          <ChevronLeft size={16} />
+          Previous
+        </button>
+        <div className="vocab-page-numbers">
+          {visiblePages.map((pageNumber, index) => {
+            const previousPage = visiblePages[index - 1];
+            return (
+              <FragmentedVocabPageButton
+                key={pageNumber}
+                page={pageNumber}
+                previousVisible={Boolean(previousPage && pageNumber - previousPage > 1)}
+                active={pageNumber === page}
+                onClick={() => changePage(pageNumber)}
+              />
+            );
+          })}
+        </div>
+        <button className="vocab-page-nav" disabled={page === totalPages} onClick={() => changePage(page + 1)}>
+          Next
+          <ChevronRight size={16} />
+        </button>
+      </nav>
+    </section>
+  );
+}
+
+function FragmentedVocabPageButton({
+  page,
+  previousVisible,
+  active,
+  onClick,
+}: {
+  page: number;
+  previousVisible: boolean;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <>
+      {previousVisible && <span className="vocab-page-ellipsis">...</span>}
+      <button className={active ? "vocab-page-link active" : "vocab-page-link"} onClick={onClick}>
+        {page}
+      </button>
+    </>
+  );
+}
+
+function ExpandableActionBar({ items }: { items: ActionBarItem[] }) {
+  return (
+    <div className="action-bar" aria-label="Main navigation">
+      {items.map((item) => (
+        <button
+          key={item.id}
+          type="button"
+          className={item.active ? "action-bar-item active" : "action-bar-item"}
+          onClick={item.onClick}
+          title={item.label}
+        >
+          <span className="action-bar-highlight" />
+          <span className="action-bar-icon">{item.icon}</span>
+          <span className="action-bar-label">{item.label}</span>
+          {item.badge && <span className="action-bar-badge">{item.badge}</span>}
+        </button>
+      ))}
+    </div>
+  );
+}

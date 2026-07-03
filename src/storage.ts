@@ -1,0 +1,162 @@
+import type { AnswerRecord, UserProfile } from "./types";
+import type { Question, Section } from "./types";
+
+const SESSION_USER_KEY = "4sat.session.user";
+const ANSWERS_KEY = "4sat.answers";
+
+type RegisterPayload = {
+  fullName: string;
+  nickname: string;
+  age: number;
+  gmail: string;
+  password: string;
+};
+
+type LoginPayload = {
+  gmail: string;
+  password: string;
+};
+
+const readJson = <T,>(key: string, fallback: T): T => {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+};
+
+const writeJson = <T,>(key: string, value: T) => {
+  localStorage.setItem(key, JSON.stringify(value));
+};
+
+const requestJson = async <T,>(path: string, payload: unknown): Promise<T> => {
+  const response = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  const data = (await response.json()) as { error?: string } & T;
+
+  if (!response.ok) {
+    throw new Error(data.error || "Something went wrong.");
+  }
+
+  return data;
+};
+
+const getJson = async <T,>(path: string): Promise<T> => {
+  const response = await fetch(path);
+  const data = (await response.json()) as { error?: string } & T;
+  if (!response.ok) throw new Error(data.error || "Something went wrong.");
+  return data;
+};
+
+export type ArenaPlayer = {
+  userId: string;
+  nickname: string;
+  score: number;
+  isHost: boolean;
+  answeredCurrent: boolean;
+};
+
+export type ArenaRoom = {
+  id: string;
+  code: string;
+  isHost: boolean;
+  hostUserId: string;
+  maxPlayers: number;
+  section: Section | "Mixed";
+  sections: Section[];
+  domains: string[];
+  skills: string[];
+  questionCount: number;
+  status: "waiting" | "playing" | "finished";
+  currentIndex: number;
+  totalQuestions: number;
+  currentQuestion: Question | null;
+  players: ArenaPlayer[];
+  winner?: { userId: string; nickname: string; score: number } | null;
+};
+
+export const getStoredUser = () => readJson<UserProfile | null>(SESSION_USER_KEY, null);
+
+export const saveStoredUser = (user: UserProfile) => writeJson(SESSION_USER_KEY, user);
+
+export const clearStoredUser = () => localStorage.removeItem(SESSION_USER_KEY);
+
+export const registerUser = async (payload: RegisterPayload) => {
+  const data = await requestJson<{ user: UserProfile }>("/api/auth/register", payload);
+  return data.user;
+};
+
+export const loginUser = async (payload: LoginPayload) => {
+  const data = await requestJson<{ user: UserProfile }>("/api/auth/login", payload);
+  return data.user;
+};
+
+export const createArenaRoom = async (payload: {
+  userId: string;
+  nickname: string;
+  password: string;
+  maxPlayers: number;
+  sections: Section[];
+  domains: string[];
+  skills: string[];
+  questionCount: number;
+}) => {
+  const data = await requestJson<{ room: ArenaRoom }>("/api/arena/create", payload);
+  return data.room;
+};
+
+export const joinArenaRoom = async (payload: { userId: string; nickname: string; code: string; password: string }) => {
+  const data = await requestJson<{ room: ArenaRoom }>("/api/arena/join", payload);
+  return data.room;
+};
+
+export const configureArenaRoom = async (payload: {
+  roomId: string;
+  userId: string;
+  maxPlayers: number;
+  sections: Section[];
+  domains: string[];
+  skills: string[];
+  questionCount: number;
+}) => {
+  const data = await requestJson<{ room: ArenaRoom }>("/api/arena/configure", payload);
+  return data.room;
+};
+
+export const startArenaRoom = async (payload: { roomId: string; userId: string }) => {
+  const data = await requestJson<{ room: ArenaRoom }>("/api/arena/start", payload);
+  return data.room;
+};
+
+export const answerArenaQuestion = async (payload: {
+  roomId: string;
+  userId: string;
+  questionId: string;
+  selectedIndex?: number;
+  freeResponse?: string;
+  elapsedMs: number;
+}) => requestJson<{ correct: boolean; attempts: number; scoreAwarded: number; room: ArenaRoom }>("/api/arena/answer", payload);
+
+export const getArenaRoom = async (roomId: string, userId: string) => {
+  const data = await getJson<{ room: ArenaRoom }>(`/api/arena/room?roomId=${encodeURIComponent(roomId)}&userId=${encodeURIComponent(userId)}`);
+  return data.room;
+};
+
+export const getAnswers = (userId: string) => readJson<Record<string, AnswerRecord[]>>(ANSWERS_KEY, {})[userId] ?? [];
+
+export const saveAnswer = (userId: string, answer: AnswerRecord) => {
+  const allAnswers = readJson<Record<string, AnswerRecord[]>>(ANSWERS_KEY, {});
+  const previous = allAnswers[userId] ?? [];
+  const next = [...previous.filter((item) => item.questionId !== answer.questionId), answer];
+  writeJson(ANSWERS_KEY, { ...allAnswers, [userId]: next });
+};
+
+export const resetAnswers = (userId: string) => {
+  const allAnswers = readJson<Record<string, AnswerRecord[]>>(ANSWERS_KEY, {});
+  writeJson(ANSWERS_KEY, { ...allAnswers, [userId]: [] });
+};

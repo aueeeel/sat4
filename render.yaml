@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: 4sat
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATA_DIR
+        value: /var/data
+    disk:
+      name: 4sat-data
+      mountPath: /var/data
+      sizeGB: 1
