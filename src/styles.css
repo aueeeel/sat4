@@ -2685,6 +2685,60 @@ input:focus {
   font-weight: 850;
 }
 
+.form-success {
+  margin: 0;
+  color: #13945f;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.friend-requests {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(233, 65, 150, 0.2);
+  border-radius: 18px;
+  background: rgba(233, 65, 150, 0.04);
+}
+
+.friend-requests > div {
+  display: grid;
+  gap: 8px;
+}
+
+.friend-requests > div > strong {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.friend-request-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #ffffff;
+}
+
+.friend-request-row span {
+  color: var(--ink);
+  font-weight: 900;
+}
+
+.friend-request-row em {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 850;
+}
+
+.friend-request-row.muted {
+  opacity: 0.8;
+}
+
 .friends-chat-layout {
   display: grid;
   grid-template-columns: 230px minmax(0, 1fr);

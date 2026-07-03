@@ -98,6 +98,16 @@ export type FriendMessage = {
   createdAt: string;
 };
 
+export type FriendRequest = {
+  id: string;
+  senderId: string;
+  receiverId: string;
+  direction: "incoming" | "outgoing";
+  status: string;
+  createdAt: string;
+  user: UserProfile;
+};
+
 export const getStoredUser = () => readJson<UserProfile | null>(SESSION_USER_KEY, null);
 
 export const saveStoredUser = (user: UserProfile) => writeJson(SESSION_USER_KEY, user);
@@ -124,14 +134,22 @@ export const getFriends = async (userId: string) => {
   return data.friends;
 };
 
+export const getFriendRequests = async (userId: string) => {
+  const data = await getJson<{ requests: FriendRequest[] }>(`/api/friends/requests?userId=${encodeURIComponent(userId)}`);
+  return data.requests;
+};
+
 export const searchFriend = async (userId: string, query: string) => {
   const data = await getJson<{ user: UserProfile }>(`/api/friends/search?userId=${encodeURIComponent(userId)}&q=${encodeURIComponent(query)}`);
   return data.user;
 };
 
 export const addFriend = async (payload: { userId: string; friendId: string }) => {
-  const data = await requestJson<{ friends: UserProfile[] }>("/api/friends/add", payload);
-  return data.friends;
+  return requestJson<{ status: "requested" | "accepted" | "friends"; friends: UserProfile[]; requests: FriendRequest[] }>("/api/friends/add", payload);
+};
+
+export const acceptFriendRequest = async (payload: { userId: string; requestId: string }) => {
+  return requestJson<{ friends: UserProfile[]; requests: FriendRequest[] }>("/api/friends/accept", payload);
 };
 
 export const getFriendMessages = async (userId: string, friendId: string) => {

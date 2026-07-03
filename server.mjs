@@ -98,6 +98,16 @@ db.exec(`
     UNIQUE(user_a, user_b)
   );
 
+  CREATE TABLE IF NOT EXISTS friend_requests (
+    id TEXT PRIMARY KEY,
+    sender_id TEXT NOT NULL,
+    receiver_id TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(sender_id, receiver_id)
+  );
+
   CREATE TABLE IF NOT EXISTS friend_messages (
     id TEXT PRIMARY KEY,
     sender_id TEXT NOT NULL,
@@ -229,6 +239,24 @@ const publicUser = (row) => ({
   joinedAt: row.joined_at,
 });
 
+const publicFriendRequest = (row, currentUserId) => ({
+  id: row.id,
+  senderId: row.sender_id,
+  receiverId: row.receiver_id,
+  direction: row.sender_id === currentUserId ? "outgoing" : "incoming",
+  status: row.status,
+  createdAt: row.created_at,
+  user: publicUser({
+    id: row.sender_id === currentUserId ? row.receiver_id : row.sender_id,
+    full_name: row.full_name,
+    nickname: row.nickname,
+    age: row.age,
+    gmail: row.gmail,
+    elo: row.elo,
+    joined_at: row.joined_at,
+  }),
+});
+
 const validateRegistration = ({ fullName, nickname, age, gmail, password }) => {
   if (!fullName || !nickname || !age || !gmail || !password) return "Заполни все поля.";
   if (!isValidGmail(gmail)) return "Введи Gmail в формате name@gmail.com.";
@@ -248,6 +276,34 @@ const insertUser = db.prepare(`
 const updateUserElo = db.prepare("UPDATE users SET elo = max(0, elo + ?) WHERE id = ?");
 const getFriendship = db.prepare("SELECT * FROM friendships WHERE user_a = ? AND user_b = ?");
 const insertFriendship = db.prepare("INSERT OR IGNORE INTO friendships (id, user_a, user_b, created_at) VALUES (?, ?, ?, ?)");
+const getFriendRequest = db.prepare(`
+  SELECT * FROM friend_requests
+  WHERE ((sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?))
+    AND status = 'pending'
+`);
+const insertFriendRequest = db.prepare(`
+  INSERT INTO friend_requests (id, sender_id, receiver_id, status, created_at, updated_at)
+  VALUES (?, ?, ?, 'pending', ?, ?)
+  ON CONFLICT(sender_id, receiver_id) DO UPDATE SET
+    status = 'pending',
+    updated_at = excluded.updated_at
+`);
+const acceptFriendRequest = db.prepare(`
+  UPDATE friend_requests
+  SET status = 'accepted', updated_at = ?
+  WHERE id = ? AND receiver_id = ? AND status = 'pending'
+`);
+const getFriendRequests = db.prepare(`
+  SELECT friend_requests.*, users.nickname, users.full_name, users.age, users.gmail, users.elo, users.joined_at
+  FROM friend_requests
+  JOIN users ON users.id = CASE
+    WHEN friend_requests.sender_id = ? THEN friend_requests.receiver_id
+    ELSE friend_requests.sender_id
+  END
+  WHERE (friend_requests.sender_id = ? OR friend_requests.receiver_id = ?)
+    AND friend_requests.status = 'pending'
+  ORDER BY friend_requests.created_at DESC
+`);
 const getFriendRows = db.prepare(`
   SELECT users.* FROM friendships
   JOIN users ON users.id = CASE WHEN friendships.user_a = ? THEN friendships.user_b ELSE friendships.user_a END
@@ -522,6 +578,13 @@ const server = createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === "GET" && url.pathname === "/api/friends/requests") {
+      const userId = url.searchParams.get("userId") ?? "";
+      const requests = getFriendRequests.all(userId, userId, userId).map((requestRow) => publicFriendRequest(requestRow, userId));
+      json(response, 200, { requests });
+      return;
+    }
+
     if (request.method === "GET" && url.pathname === "/api/friends/search") {
       const query = String(url.searchParams.get("q") ?? "").trim();
       const userId = String(url.searchParams.get("userId") ?? "");
@@ -545,8 +608,55 @@ const server = createServer(async (request, response) => {
         return;
       }
       const [userA, userB] = [userId, friendId].sort();
-      insertFriendship.run(randomUUID(), userA, userB, new Date().toISOString());
-      json(response, 200, { friends: getFriendRows.all(userId, userId, userId).map(publicUser) });
+      if (getFriendship.get(userA, userB)) {
+        json(response, 200, {
+          status: "friends",
+          friends: getFriendRows.all(userId, userId, userId).map(publicUser),
+          requests: getFriendRequests.all(userId, userId, userId).map((requestRow) => publicFriendRequest(requestRow, userId)),
+        });
+        return;
+      }
+
+      const existingRequest = getFriendRequest.get(userId, friendId, friendId, userId);
+      if (existingRequest?.receiver_id === userId) {
+        const now = new Date().toISOString();
+        acceptFriendRequest.run(now, existingRequest.id, userId);
+        insertFriendship.run(randomUUID(), userA, userB, now);
+        json(response, 200, {
+          status: "accepted",
+          friends: getFriendRows.all(userId, userId, userId).map(publicUser),
+          requests: getFriendRequests.all(userId, userId, userId).map((requestRow) => publicFriendRequest(requestRow, userId)),
+        });
+        return;
+      }
+
+      const now = new Date().toISOString();
+      insertFriendRequest.run(randomUUID(), userId, friendId, now, now);
+      json(response, 200, {
+        status: "requested",
+        friends: getFriendRows.all(userId, userId, userId).map(publicUser),
+        requests: getFriendRequests.all(userId, userId, userId).map((requestRow) => publicFriendRequest(requestRow, userId)),
+      });
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/friends/accept") {
+      const body = await readBody(request);
+      const userId = String(body.userId ?? "");
+      const requestId = String(body.requestId ?? "");
+      const requestRow = db.prepare("SELECT * FROM friend_requests WHERE id = ? AND receiver_id = ? AND status = 'pending'").get(requestId, userId);
+      if (!requestRow) {
+        json(response, 404, { error: "Friend request not found." });
+        return;
+      }
+      const [userA, userB] = [requestRow.sender_id, requestRow.receiver_id].sort();
+      const now = new Date().toISOString();
+      acceptFriendRequest.run(now, requestId, userId);
+      insertFriendship.run(randomUUID(), userA, userB, now);
+      json(response, 200, {
+        friends: getFriendRows.all(userId, userId, userId).map(publicUser),
+        requests: getFriendRequests.all(userId, userId, userId).map((pendingRequest) => publicFriendRequest(pendingRequest, userId)),
+      });
       return;
     }
 

@@ -37,6 +37,7 @@ import { questions, sourceNote } from "./data/questions";
 import vocabularyData from "./data/vocabulary.json";
 import {
   answerArenaQuestion,
+  acceptFriendRequest,
   addFriend,
   awardUserElo,
   clearStoredUser,
@@ -45,6 +46,7 @@ import {
   getAnswers,
   getArenaRoom,
   getFriendMessages,
+  getFriendRequests,
   getFriends,
   getStoredUser,
   joinArenaRoom,
@@ -58,6 +60,7 @@ import {
   startArenaRoom,
   type ArenaRoom,
   type FriendMessage,
+  type FriendRequest,
 } from "./storage";
 import type { AnswerRecord, Difficulty, Question, Section, UserProfile } from "./types";
 
@@ -2080,22 +2083,36 @@ function FriendsView({
   onOpenQuestion: (questionId: string) => void;
 }) {
   const [friends, setFriends] = useState<UserProfile[]>([]);
+  const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([]);
   const [activeFriendId, setActiveFriendId] = useState("");
   const [messages, setMessages] = useState<FriendMessage[]>([]);
   const [friendQuery, setFriendQuery] = useState("");
   const [friendResult, setFriendResult] = useState<UserProfile | null>(null);
   const [friendsError, setFriendsError] = useState("");
+  const [friendsStatus, setFriendsStatus] = useState("");
   const [chatText, setChatText] = useState("");
   const activeFriend = friends.find((friend) => friend.id === activeFriendId) ?? friends[0] ?? null;
+  const incomingRequests = friendRequests.filter((request) => request.direction === "incoming");
+  const outgoingRequests = friendRequests.filter((request) => request.direction === "outgoing");
+
+  const refreshFriends = async () => {
+    const [friendItems, requestItems] = await Promise.all([getFriends(currentUser.id), getFriendRequests(currentUser.id)]);
+    setFriends(friendItems);
+    setFriendRequests(requestItems);
+    if (!activeFriendId && friendItems[0]) setActiveFriendId(friendItems[0].id);
+  };
 
   useEffect(() => {
-    getFriends(currentUser.id)
-      .then((items) => {
-        setFriends(items);
-        if (!activeFriendId && items[0]) setActiveFriendId(items[0].id);
-      })
+    refreshFriends()
       .catch((error) => setFriendsError(error instanceof Error ? error.message : "Could not load friends."));
   }, [currentUser.id]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      refreshFriends().catch(() => undefined);
+    }, 5000);
+    return () => window.clearInterval(interval);
+  }, [currentUser.id, activeFriendId]);
 
   useEffect(() => {
     if (!activeFriend) {
@@ -2109,6 +2126,7 @@ function FriendsView({
 
   const findFriend = async () => {
     setFriendsError("");
+    setFriendsStatus("");
     setFriendResult(null);
     try {
       setFriendResult(await searchFriend(currentUser.id, friendQuery));
@@ -2119,11 +2137,27 @@ function FriendsView({
 
   const addFoundFriend = async () => {
     if (!friendResult) return;
-    const nextFriends = await addFriend({ userId: currentUser.id, friendId: friendResult.id });
-    setFriends(nextFriends);
-    setActiveFriendId(friendResult.id);
+    setFriendsError("");
+    const result = await addFriend({ userId: currentUser.id, friendId: friendResult.id });
+    setFriends(result.friends);
+    setFriendRequests(result.requests);
+    if (result.status === "accepted" || result.status === "friends") {
+      setActiveFriendId(friendResult.id);
+      setFriendsStatus("Friend added. You can chat now.");
+    } else {
+      setFriendsStatus("Friend request sent. They will see it in Friends.");
+    }
     setFriendResult(null);
     setFriendQuery("");
+  };
+
+  const acceptRequest = async (requestId: string, friendId: string) => {
+    setFriendsError("");
+    const result = await acceptFriendRequest({ userId: currentUser.id, requestId });
+    setFriends(result.friends);
+    setFriendRequests(result.requests);
+    setActiveFriendId(friendId);
+    setFriendsStatus("Friend request accepted.");
   };
 
   const sendMessage = async () => {
@@ -2169,7 +2203,34 @@ function FriendsView({
               <button className="ghost-button" onClick={addFoundFriend}>Add friend</button>
             </div>
           )}
+          {friendsStatus && <p className="form-success">{friendsStatus}</p>}
           {friendsError && <p className="form-error">{friendsError}</p>}
+          {(incomingRequests.length > 0 || outgoingRequests.length > 0) && (
+            <div className="friend-requests">
+              {incomingRequests.length > 0 && (
+                <div>
+                  <strong>Incoming requests</strong>
+                  {incomingRequests.map((request) => (
+                    <div key={request.id} className="friend-request-row">
+                      <span>{request.user.nickname}</span>
+                      <button className="ghost-button" onClick={() => acceptRequest(request.id, request.user.id)}>Accept</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {outgoingRequests.length > 0 && (
+                <div>
+                  <strong>Sent requests</strong>
+                  {outgoingRequests.map((request) => (
+                    <div key={request.id} className="friend-request-row muted">
+                      <span>{request.user.nickname}</span>
+                      <em>Waiting</em>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="friends-chat-layout">
             <div className="friend-list">
