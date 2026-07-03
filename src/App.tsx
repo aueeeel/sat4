@@ -148,12 +148,18 @@ const splitPrompt = (prompt: string) => {
   );
 
   if (questionStart <= 0) {
-    return { passage: "", questionText: trimmed };
+    return { passage: "", questionText: trimmed.replace(/\s+/g, " ") };
   }
 
   return {
-    passage: trimmed.slice(0, questionStart).trim(),
-    questionText: trimmed.slice(questionStart).trim(),
+    passage: trimmed
+      .slice(0, questionStart)
+      .trim()
+      .split(/\n{2,}/)
+      .map((paragraph) => paragraph.replace(/\s*\n\s*/g, " ").replace(/\s+/g, " ").trim())
+      .filter(Boolean)
+      .join("\n\n"),
+    questionText: trimmed.slice(questionStart).trim().replace(/\s+/g, " "),
   };
 };
 
@@ -705,7 +711,7 @@ export default function App() {
                     const isCorrect = index === activeQuestion.correctIndex;
                     const isSelected = (activeAnswer?.selectedIndex ?? selectedIndex) === index;
                     const isEliminated = eliminatedChoices[activeQuestion.id]?.includes(index);
-                    const showCorrect = (isSelected && isCorrect) || (sessionComplete && isCorrect);
+                    const showCorrect = (answered && isSelected && isCorrect) || (sessionComplete && isCorrect);
                     const choiceImage = activeQuestion.choiceImagePaths?.[index];
                     return (
                       <div
