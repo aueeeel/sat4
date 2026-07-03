@@ -197,6 +197,8 @@ export default function App() {
   const [eliminatedChoices, setEliminatedChoices] = useState<Record<string, number[]>>({});
   const [wrongPracticeChoices, setWrongPracticeChoices] = useState<Record<string, number[]>>({});
   const [shareQuestion, setShareQuestion] = useState<Question | null>(null);
+  const [activeStudyRoomId, setActiveStudyRoomId] = useState("");
+  const [studyDockMinimized, setStudyDockMinimized] = useState(false);
   const [openExplanationIds, setOpenExplanationIds] = useState<string[]>([]);
   const [practiceMode, setPracticeMode] = useState(false);
   const [calculatorOpen, setCalculatorOpen] = useState(false);
@@ -844,6 +846,19 @@ export default function App() {
             </button>
           </div>
         </footer>
+        {shareQuestion && (
+          <SendQuestionDialog currentUser={currentUser} question={shareQuestion} onClose={() => setShareQuestion(null)} />
+        )}
+        {activeStudyRoomId && (
+          <StudyRoomDock
+            currentUser={currentUser}
+            roomId={activeStudyRoomId}
+            minimized={studyDockMinimized}
+            onMinimize={() => setStudyDockMinimized(true)}
+            onRestore={() => setStudyDockMinimized(false)}
+            onClose={() => setActiveStudyRoomId("")}
+          />
+        )}
       </main>
     );
   }
@@ -936,7 +951,13 @@ export default function App() {
       {bankView === "arena" ? (
         <ArenaView currentUser={currentUser} />
       ) : bankView === "study" ? (
-        <StudyRoomView currentUser={currentUser} />
+        <StudyRoomView
+          activeRoomId={activeStudyRoomId}
+          onJoinRoom={(roomId) => {
+            setActiveStudyRoomId(roomId);
+            setStudyDockMinimized(false);
+          }}
+        />
       ) : bankView === "friends" ? (
         <FriendsView
           currentUser={currentUser}
@@ -1348,6 +1369,16 @@ export default function App() {
       </section>
       {shareQuestion && (
         <SendQuestionDialog currentUser={currentUser} question={shareQuestion} onClose={() => setShareQuestion(null)} />
+      )}
+      {activeStudyRoomId && (
+        <StudyRoomDock
+          currentUser={currentUser}
+          roomId={activeStudyRoomId}
+          minimized={studyDockMinimized}
+          onMinimize={() => setStudyDockMinimized(true)}
+          onRestore={() => setStudyDockMinimized(false)}
+          onClose={() => setActiveStudyRoomId("")}
+        />
       )}
     </main>
   );
@@ -2264,19 +2295,14 @@ const studyRooms = [
   },
 ];
 
-function StudyRoomView({ currentUser }: { currentUser: UserProfile }) {
-  const [activeRoomId, setActiveRoomId] = useState(studyRooms[0].id);
-  const activeRoom = studyRooms.find((room) => room.id === activeRoomId) ?? studyRooms[0];
-  const roomName = `4sat-${activeRoom.id}`;
-  const displayName = encodeURIComponent(currentUser.nickname || currentUser.name || "4sat student");
-  const videoUrl = `https://meet.jit.si/${roomName}#userInfo.displayName=\"${displayName}\"&config.startWithAudioMuted=true&config.startSilent=true&config.prejoinConfig.enabled=false&interfaceConfig.TOOLBAR_BUTTONS=[\"camera\",\"tileview\",\"hangup\"]`;
-
+function StudyRoomView({ activeRoomId, onJoinRoom }: { activeRoomId: string; onJoinRoom: (roomId: string) => void }) {
+  const activeRoom = studyRooms.find((room) => room.id === activeRoomId) ?? null;
   return (
     <section className="study-page">
       <div className="study-hero">
         <p className="eyebrow">Study Room</p>
         <h1>Camera-on study rooms.</h1>
-        <p>Pick a room, join the call inside 4sat, and study together with microphones disabled.</p>
+        <p>Pick a room once. The meeting stays open in a floating window while you use Question Bank, Arena, Vocabulary, or Friends.</p>
       </div>
 
       <div className="study-layout">
@@ -2284,8 +2310,8 @@ function StudyRoomView({ currentUser }: { currentUser: UserProfile }) {
           {studyRooms.map((room) => (
             <button
               key={room.id}
-              className={activeRoom.id === room.id ? `study-room-card active ${room.accent}` : `study-room-card ${room.accent}`}
-              onClick={() => setActiveRoomId(room.id)}
+              className={activeRoom?.id === room.id ? `study-room-card active ${room.accent}` : `study-room-card ${room.accent}`}
+              onClick={() => onJoinRoom(room.id)}
             >
               <span><Video size={17} /></span>
               <strong>{room.title}</strong>
@@ -2294,23 +2320,70 @@ function StudyRoomView({ currentUser }: { currentUser: UserProfile }) {
           ))}
         </aside>
 
-        <article className="study-video-panel">
+        <article className="study-video-panel study-room-start-panel">
           <div className="study-video-head">
             <div>
-              <span>Live room</span>
-              <h2>{activeRoom.title}</h2>
+              <span>{activeRoom ? "Meeting running" : "Choose a room"}</span>
+              <h2>{activeRoom ? `${activeRoom.title} is open` : "Start a study room"}</h2>
             </div>
-            <p>No moderator needed: the room starts when the first student joins. Mic is hidden and muted.</p>
+            <p>No moderator needed: the first student starts the room automatically. Mic is hidden and muted.</p>
           </div>
-          <iframe
-            title={`${activeRoom.title} study room`}
-            src={videoUrl}
-            allow="camera; display-capture; fullscreen"
-            referrerPolicy="strict-origin-when-cross-origin"
-          />
+          <div className="study-room-start">
+            <Video size={42} />
+            <strong>{activeRoom ? "Floating meeting is active" : "Select Room 1, Room 2, etc."}</strong>
+            <p>{activeRoom ? "You can switch tabs now. The meeting will stay in the corner." : "When you choose a room, the conference opens in a small movable-style window."}</p>
+          </div>
         </article>
       </div>
     </section>
+  );
+}
+
+function StudyRoomDock({
+  currentUser,
+  roomId,
+  minimized,
+  onMinimize,
+  onRestore,
+  onClose,
+}: {
+  currentUser: UserProfile;
+  roomId: string;
+  minimized: boolean;
+  onMinimize: () => void;
+  onRestore: () => void;
+  onClose: () => void;
+}) {
+  const room = studyRooms.find((item) => item.id === roomId) ?? studyRooms[0];
+  const roomName = `4sat-${room.id}`;
+  const displayName = encodeURIComponent(currentUser.nickname || currentUser.name || "4sat student");
+  const videoUrl = `https://meet.jit.si/${roomName}#userInfo.displayName=\"${displayName}\"&config.startWithAudioMuted=true&config.startSilent=true&config.prejoinConfig.enabled=false&interfaceConfig.TOOLBAR_BUTTONS=[\"camera\",\"tileview\",\"hangup\"]`;
+
+  return (
+    <aside className={minimized ? "study-dock minimized" : "study-dock"} aria-label={`${room.title} meeting`}>
+      <header>
+        <div>
+          <span>Study Room</span>
+          <strong>{room.title}</strong>
+        </div>
+        <div>
+          {minimized ? (
+            <button onClick={onRestore}>Open</button>
+          ) : (
+            <button onClick={onMinimize}>Minimize</button>
+          )}
+          <button onClick={onClose}>End</button>
+        </div>
+      </header>
+      {!minimized && (
+        <iframe
+          title={`${room.title} persistent study room`}
+          src={videoUrl}
+          allow="camera; display-capture; fullscreen"
+          referrerPolicy="strict-origin-when-cross-origin"
+        />
+      )}
+    </aside>
   );
 }
 
