@@ -1493,12 +1493,28 @@ function ArenaView({ currentUser }: { currentUser: UserProfile }) {
           <p>Create a private room, choose Math or Reading & Writing modules, and race through random questions.</p>
         </div>
         <div className="arena-entry-grid">
-          <article className={arenaMode === "create" ? "arena-entry-card active" : "arena-entry-card"}>
-            <button onClick={() => setArenaMode("create")}>Create room</button>
+          <article
+            className={arenaMode === "create" ? "arena-entry-card active" : "arena-entry-card"}
+            role="button"
+            tabIndex={0}
+            onClick={() => setArenaMode("create")}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") setArenaMode("create");
+            }}
+          >
+            <strong>Create room</strong>
             <p>Host chooses question type, modules, player limit, and starts the match.</p>
           </article>
-          <article className={arenaMode === "join" ? "arena-entry-card active" : "arena-entry-card"}>
-            <button onClick={() => setArenaMode("join")}>Join room</button>
+          <article
+            className={arenaMode === "join" ? "arena-entry-card active" : "arena-entry-card"}
+            role="button"
+            tabIndex={0}
+            onClick={() => setArenaMode("join")}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") setArenaMode("join");
+            }}
+          >
+            <strong>Join room</strong>
             <p>Enter a code and password from your friend to join the lobby.</p>
           </article>
         </div>

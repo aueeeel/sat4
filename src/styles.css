@@ -1796,6 +1796,19 @@ input:focus {
 
 .arena-entry-card {
   padding: 20px;
+  cursor: pointer;
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.arena-entry-card:hover,
+.arena-entry-card:focus-visible {
+  transform: translateY(-2px);
+  border-color: rgba(233, 65, 150, 0.55);
+  box-shadow: 0 24px 58px -40px rgba(233, 65, 150, 0.72);
+  outline: none;
 }
 
 .arena-entry-card.active {
@@ -1803,14 +1816,15 @@ input:focus {
   box-shadow: 0 22px 54px -42px rgba(233, 65, 150, 0.68);
 }
 
-.arena-entry-card button {
-  border: 0;
-  padding: 0;
+.arena-entry-card strong {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
   color: var(--ink);
-  background: transparent;
   font-size: 20px;
   font-weight: 950;
   letter-spacing: -0.05em;
+  pointer-events: none;
 }
 
 .arena-entry-card p,
