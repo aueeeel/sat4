@@ -3577,9 +3577,9 @@ input:focus {
   display: block;
   width: auto;
   max-width: 100%;
-  max-height: 36px;
+  max-height: 220px;
   object-fit: contain;
-  object-position: left center;
+  object-position: left top;
 }
 
 .sat-free-response.correct,
