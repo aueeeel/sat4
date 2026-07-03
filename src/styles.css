@@ -2120,7 +2120,15 @@ input:focus {
   gap: 10px;
 }
 
-.arena-choices button {
+.arena-choice-row {
+  display: grid;
+  grid-template-columns: 1fr 42px;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.arena-choice-main,
+.arena-review-choice {
   display: grid;
   grid-template-columns: 34px 1fr;
   align-items: center;
@@ -2134,12 +2142,35 @@ input:focus {
   text-align: left;
 }
 
-.arena-choices button:hover:not(:disabled) {
+.arena-choice-main:hover:not(:disabled) {
   border-color: var(--bubble);
   background: rgba(233, 65, 150, 0.06);
 }
 
-.arena-choices span {
+.arena-choice-row.selected .arena-choice-main {
+  border-color: var(--blueberry);
+  background: rgba(96, 65, 183, 0.08);
+}
+
+.arena-choice-row.wrong .arena-choice-main,
+.arena-review-choice.wrong {
+  border-color: #cf3f31;
+  background: linear-gradient(180deg, #fff6f4, #ffebe8);
+}
+
+.arena-choice-row.eliminated .arena-choice-main,
+.sat-choice.eliminated .sat-choice-main {
+  opacity: 0.55;
+}
+
+.arena-choice-row.eliminated .arena-choice-main em,
+.sat-choice.eliminated .sat-choice-main em {
+  text-decoration: line-through;
+  text-decoration-thickness: 2px;
+}
+
+.arena-choices span,
+.arena-review-choice span {
   display: grid;
   place-items: center;
   width: 28px;
@@ -2150,10 +2181,64 @@ input:focus {
   font-weight: 950;
 }
 
-.arena-choices em {
+.arena-choices em,
+.arena-review-choice em {
   font-style: normal;
   font-weight: 700;
   line-height: 1.45;
+}
+
+.arena-tools {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.arena-review-panel {
+  align-content: start;
+}
+
+.arena-winner.compact {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 14px;
+  min-height: auto;
+  text-align: left;
+}
+
+.arena-review-card {
+  display: grid;
+  gap: 14px;
+}
+
+.arena-review-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.arena-review-choice.correct {
+  border-color: #13945f;
+  background: linear-gradient(180deg, #f1fbf6, #e8f8f0);
+}
+
+.arena-review-choice.selected {
+  box-shadow: inset 0 0 0 2px rgba(96, 65, 183, 0.18);
+}
+
+.review-correct {
+  color: #13945f !important;
+  background: #e8f8f0 !important;
+}
+
+.review-wrong {
+  color: #b42318 !important;
+  background: #ffebe8 !important;
+}
+
+.arena-feedback.correct {
+  color: #13945f;
 }
 
 .arena-feedback {
@@ -2900,6 +2985,19 @@ input:focus {
   width: 100%;
   min-height: 58px;
   display: grid;
+  grid-template-columns: 1fr 42px;
+  align-items: center;
+  gap: 12px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.sat-choice-main {
+  width: 100%;
+  min-height: 58px;
+  display: grid;
   grid-template-columns: 34px 1fr auto;
   align-items: center;
   gap: 12px;
@@ -2918,13 +3016,13 @@ input:focus {
     background 180ms ease;
 }
 
-.sat-choice:hover {
+.sat-choice:hover .sat-choice-main {
   border-color: #9fb0c8;
   box-shadow: 0 14px 32px rgba(15, 23, 42, 0.08);
   transform: translateY(-1px);
 }
 
-.sat-choice span {
+.sat-choice-main span {
   display: grid;
   place-items: center;
   width: 31px;
@@ -2936,27 +3034,61 @@ input:focus {
   font-weight: 800;
 }
 
-.sat-choice em {
+.sat-choice-main em {
   font-style: normal;
   font-size: 15px;
   font-weight: 400;
   line-height: 1.45;
 }
 
-.sat-choice.selected {
+.sat-choice.selected .sat-choice-main {
   border-color: #6b7cff;
   background: linear-gradient(180deg, #f8f9ff, #eef2ff);
   box-shadow: 0 14px 34px rgba(49, 88, 212, 0.14);
 }
 
-.sat-choice.correct {
+.sat-choice.correct .sat-choice-main {
   border-color: #13945f;
   background: linear-gradient(180deg, #f1fbf6, #e8f8f0);
 }
 
-.sat-choice.wrong {
+.sat-choice.wrong .sat-choice-main {
   border-color: #cf3f31;
   background: linear-gradient(180deg, #fff6f4, #ffebe8);
+}
+
+.choice-strike-button {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  min-height: 58px;
+  border: 0;
+  background: transparent;
+  color: #111827;
+}
+
+.choice-strike-button span {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 31px;
+  height: 31px;
+  border: 1.5px solid #c5cedc;
+  border-radius: 50%;
+  background: #ffffff;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.choice-strike-button span::after {
+  content: "";
+  position: absolute;
+  left: -9px;
+  right: -9px;
+  top: 50%;
+  height: 2px;
+  background: currentColor;
+  transform: translateY(-50%);
 }
 
 .sat-explanation {

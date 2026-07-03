@@ -76,6 +76,15 @@ export type ArenaRoom = {
   currentIndex: number;
   totalQuestions: number;
   currentQuestion: Question | null;
+  review: Array<Question & {
+    index: number;
+    correctAnswer: string;
+    selectedIndex: number | null;
+    freeResponse: string;
+    correct: boolean;
+    attempts: number;
+    scoreAwarded: number;
+  }>;
   players: ArenaPlayer[];
   winner?: { userId: string; nickname: string; score: number } | null;
 };
@@ -140,7 +149,7 @@ export const answerArenaQuestion = async (payload: {
   selectedIndex?: number;
   freeResponse?: string;
   elapsedMs: number;
-}) => requestJson<{ correct: boolean; attempts: number; scoreAwarded: number; room: ArenaRoom }>("/api/arena/answer", payload);
+}) => requestJson<{ correct: boolean; attempts: number; scoreAwarded: number; waitMs?: number; room: ArenaRoom }>("/api/arena/answer", payload);
 
 export const getArenaRoom = async (roomId: string, userId: string) => {
   const data = await getJson<{ room: ArenaRoom }>(`/api/arena/room?roomId=${encodeURIComponent(roomId)}&userId=${encodeURIComponent(userId)}`);

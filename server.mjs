@@ -29,6 +29,7 @@ const questionBank = rawQuestionBank.map((question) => ({
   choices: question.choices ?? [],
   correctAnswer: question.correct_answer,
   acceptedAnswers: question.accepted_answers ?? [],
+  explanation: question.explanation,
 }));
 const questionById = new Map(questionBank.map((question) => [question.id, question]));
 
@@ -81,6 +82,9 @@ db.exec(`
     correct INTEGER NOT NULL DEFAULT 0,
     score_awarded INTEGER NOT NULL DEFAULT 0,
     elapsed_ms INTEGER NOT NULL DEFAULT 0,
+    selected_index INTEGER,
+    free_response TEXT,
+    cooldown_until TEXT,
     answered_at TEXT,
     UNIQUE(room_id, user_id, question_id)
   );
@@ -90,6 +94,18 @@ try {
   db.exec(`ALTER TABLE arena_rooms ADD COLUMN sections_json TEXT NOT NULL DEFAULT '["Math"]';`);
 } catch {
   // Existing databases already have this column.
+}
+
+for (const migration of [
+  `ALTER TABLE arena_answers ADD COLUMN selected_index INTEGER;`,
+  `ALTER TABLE arena_answers ADD COLUMN free_response TEXT;`,
+  `ALTER TABLE arena_answers ADD COLUMN cooldown_until TEXT;`,
+]) {
+  try {
+    db.exec(migration);
+  } catch {
+    // Existing databases already have this column.
+  }
 }
 
 const json = (response, status, payload) => {
@@ -234,12 +250,12 @@ const finishRoomStatement = db.prepare("UPDATE arena_rooms SET status = 'finishe
 const advanceRoomStatement = db.prepare("UPDATE arena_rooms SET current_index = ? WHERE id = ?");
 const getAnswerRecord = db.prepare("SELECT * FROM arena_answers WHERE room_id = ? AND user_id = ? AND question_id = ?");
 const upsertAnswer = db.prepare(`
-  INSERT INTO arena_answers (id, room_id, user_id, question_id, attempts, correct, score_awarded, elapsed_ms, answered_at)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  INSERT INTO arena_answers (id, room_id, user_id, question_id, attempts, correct, score_awarded, elapsed_ms, selected_index, free_response, cooldown_until, answered_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   ON CONFLICT(room_id, user_id, question_id)
-  DO UPDATE SET attempts = excluded.attempts, correct = excluded.correct, score_awarded = excluded.score_awarded, elapsed_ms = excluded.elapsed_ms, answered_at = excluded.answered_at
+  DO UPDATE SET attempts = excluded.attempts, correct = excluded.correct, score_awarded = excluded.score_awarded, elapsed_ms = excluded.elapsed_ms, selected_index = excluded.selected_index, free_response = excluded.free_response, cooldown_until = excluded.cooldown_until, answered_at = excluded.answered_at
 `);
-const addPlayerScore = db.prepare("UPDATE arena_players SET score = score + ? WHERE room_id = ? AND user_id = ?");
+const addPlayerScore = db.prepare("UPDATE arena_players SET score = max(0, score + ?) WHERE room_id = ? AND user_id = ?");
 const getCorrectAnswersForQuestion = db.prepare("SELECT COUNT(*) AS count FROM arena_answers WHERE room_id = ? AND question_id = ? AND correct = 1");
 
 const randomRoomCode = () => randomBytes(3).toString("hex").toUpperCase();
@@ -274,6 +290,7 @@ const publicQuestion = (question) => ({
   imagePath: question.imagePath,
   choiceImagePaths: question.choiceImagePaths,
   choices: question.choices,
+  explanation: question.explanation,
 });
 
 const publicRoom = (room, userId) => {
@@ -286,6 +303,26 @@ const publicRoom = (room, userId) => {
     : [];
   const winner = room.status === "finished" ? [...players].sort((a, b) => b.score - a.score)[0] ?? null : null;
   const sections = normalizeSections(parseJson(room.sections_json, [room.section]), room.section);
+  const review = room.status === "finished"
+    ? questionIds
+        .map((questionId, index) => {
+          const question = questionById.get(questionId);
+          if (!question) return null;
+          const answer = getAnswerRecord.get(room.id, userId, questionId);
+          return {
+            ...publicQuestion(question),
+            index,
+            correctAnswer: question.correctAnswer,
+            correctIndex: question.choices.findIndex((choice) => choice === question.correctAnswer),
+            selectedIndex: answer?.selected_index ?? null,
+            freeResponse: answer?.free_response ?? "",
+            correct: Boolean(answer?.correct),
+            attempts: answer?.attempts ?? 0,
+            scoreAwarded: answer?.score_awarded ?? 0,
+          };
+        })
+        .filter(Boolean)
+    : [];
 
   return {
     id: room.id,
@@ -302,6 +339,7 @@ const publicRoom = (room, userId) => {
     currentIndex: room.current_index,
     totalQuestions: questionIds.length || room.question_count,
     currentQuestion: currentQuestion ? publicQuestion(currentQuestion) : null,
+    review,
     players: players.map((player) => ({
       userId: player.user_id,
       nickname: player.nickname,
@@ -535,12 +573,37 @@ const server = createServer(async (request, response) => {
         json(response, 200, { correct: true, scoreAwarded: 0, room: publicRoom(room, userId) });
         return;
       }
+      if (previous?.cooldown_until && new Date(previous.cooldown_until).getTime() > Date.now()) {
+        json(response, 429, {
+          error: "Wait before trying again.",
+          waitMs: new Date(previous.cooldown_until).getTime() - Date.now(),
+          room: publicRoom(room, userId),
+        });
+        return;
+      }
 
       const attempts = (previous?.attempts ?? 0) + 1;
       const correct = isCorrectArenaAnswer(question, body);
       const scoreAwarded = correct ? calculateScore(elapsedMs, attempts - 1) : 0;
-      upsertAnswer.run(randomUUID(), roomId, userId, questionId, attempts, correct ? 1 : 0, scoreAwarded, elapsedMs, new Date().toISOString());
+      const cooldownUntil = correct ? null : new Date(Date.now() + 15_000).toISOString();
+      const selectedIndex = typeof body.selectedIndex === "number" ? body.selectedIndex : null;
+      const submittedFreeResponse = selectedIndex === null ? String(body.freeResponse ?? body.answer ?? "") : "";
+      upsertAnswer.run(
+        randomUUID(),
+        roomId,
+        userId,
+        questionId,
+        attempts,
+        correct ? 1 : 0,
+        scoreAwarded,
+        elapsedMs,
+        selectedIndex,
+        submittedFreeResponse,
+        cooldownUntil,
+        new Date().toISOString()
+      );
       if (correct && scoreAwarded) addPlayerScore.run(scoreAwarded, roomId, userId);
+      if (!correct) addPlayerScore.run(-250, roomId, userId);
 
       const playerCount = countPlayers.get(roomId).count;
       const correctCount = getCorrectAnswersForQuestion.get(roomId, questionId).count;
@@ -550,7 +613,7 @@ const server = createServer(async (request, response) => {
         else advanceRoomStatement.run(nextIndex, roomId);
       }
 
-      json(response, 200, { correct, attempts, scoreAwarded, room: publicRoom(getRoomById.get(roomId), userId) });
+      json(response, 200, { correct, attempts, scoreAwarded, waitMs: correct ? 0 : 15_000, room: publicRoom(getRoomById.get(roomId), userId) });
       return;
     }
 

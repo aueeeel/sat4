@@ -173,6 +173,7 @@ export default function App() {
   const [activeQuestionId, setActiveQuestionId] = useState(questions[0].id);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [freeResponseValue, setFreeResponseValue] = useState("");
+  const [eliminatedChoices, setEliminatedChoices] = useState<Record<string, number[]>>({});
   const [openExplanationIds, setOpenExplanationIds] = useState<string[]>([]);
   const [practiceMode, setPracticeMode] = useState(false);
   const [calculatorOpen, setCalculatorOpen] = useState(false);
@@ -381,6 +382,14 @@ export default function App() {
     setSelectedIndex(choiceIndex);
     saveAnswer(currentUser.id, record);
     setAnswersVersion((value) => value + 1);
+  };
+
+  const toggleEliminatedChoice = (questionId: string, choiceIndex: number) => {
+    setEliminatedChoices((current) => {
+      const choices = current[questionId] ?? [];
+      const nextChoices = choices.includes(choiceIndex) ? choices.filter((index) => index !== choiceIndex) : [...choices, choiceIndex];
+      return { ...current, [questionId]: nextChoices };
+    });
   };
 
   const submitFreeResponse = (question: Question) => {
@@ -692,31 +701,41 @@ export default function App() {
               ) : (
                 <div className="sat-choices">
                   {activeQuestion.choices.map((choice, index) => {
-                    const answered = activeAnswer || selectedIndex !== null;
+                    const answered = Boolean(activeAnswer);
                     const isCorrect = index === activeQuestion.correctIndex;
                     const isSelected = (activeAnswer?.selectedIndex ?? selectedIndex) === index;
+                    const isEliminated = eliminatedChoices[activeQuestion.id]?.includes(index);
                     const showCorrect = (isSelected && isCorrect) || (sessionComplete && isCorrect);
                     const choiceImage = activeQuestion.choiceImagePaths?.[index];
                     return (
-                      <button
+                      <div
                         key={`${activeQuestion.id}-${choice}`}
                         className={[
                           "sat-choice",
                           isSelected ? "selected" : "",
+                          isEliminated ? "eliminated" : "",
                           showCorrect ? "correct" : "",
                           answered && isSelected && !isCorrect ? "wrong" : "",
                         ].join(" ")}
-                        onClick={() => submitAnswer(activeQuestion, index)}
                       >
-                        <span>{String.fromCharCode(65 + index)}</span>
-                        {choiceImage && choice.startsWith("Choice ") ? (
-                          <img className="sat-choice-image" src={choiceImage} alt={`Choice ${String.fromCharCode(65 + index)}`} />
-                        ) : (
-                          <em>{choice}</em>
-                        )}
-                        {showCorrect && <Check size={18} />}
-                        {answered && isSelected && !isCorrect && <X size={18} />}
-                      </button>
+                        <button className="sat-choice-main" onClick={() => setSelectedIndex(index)}>
+                          <span>{String.fromCharCode(65 + index)}</span>
+                          {choiceImage && choice.startsWith("Choice ") ? (
+                            <img className="sat-choice-image" src={choiceImage} alt={`Choice ${String.fromCharCode(65 + index)}`} />
+                          ) : (
+                            <em>{choice}</em>
+                          )}
+                          {showCorrect && <Check size={18} />}
+                          {answered && isSelected && !isCorrect && <X size={18} />}
+                        </button>
+                        <button
+                          className="choice-strike-button"
+                          aria-label={`Eliminate answer ${String.fromCharCode(65 + index)}`}
+                          onClick={() => toggleEliminatedChoice(activeQuestion.id, index)}
+                        >
+                          <span>{String.fromCharCode(65 + index)}</span>
+                        </button>
+                      </div>
                     );
                   })}
                 </div>
@@ -755,6 +774,15 @@ export default function App() {
             <button className="sat-explanation-button" onClick={() => toggleExplanation(activeQuestion.id)}>
               Explanation
             </button>
+            {!isFreeResponse && (
+              <button
+                className="sat-explanation-button"
+                disabled={selectedIndex === null || Boolean(activeAnswer)}
+                onClick={() => selectedIndex !== null && submitAnswer(activeQuestion, selectedIndex)}
+              >
+                Check
+              </button>
+            )}
             <button
               className="sat-next-button"
               disabled={activeQuestionIndex < 0 || activeQuestionIndex >= filteredQuestions.length - 1}
@@ -1350,6 +1378,16 @@ function ArenaView({ currentUser }: { currentUser: UserProfile }) {
   const [questionStartedAt, setQuestionStartedAt] = useState(Date.now());
   const [freeResponse, setFreeResponse] = useState("");
   const [arenaFeedback, setArenaFeedback] = useState("");
+  const [arenaSelectedIndex, setArenaSelectedIndex] = useState<number | null>(null);
+  const [arenaWrongChoices, setArenaWrongChoices] = useState<Record<string, number[]>>({});
+  const [arenaEliminatedChoices, setArenaEliminatedChoices] = useState<Record<string, number[]>>({});
+  const [arenaCooldownUntil, setArenaCooldownUntil] = useState(0);
+  const [arenaNow, setArenaNow] = useState(Date.now());
+  const [arenaCalculatorOpen, setArenaCalculatorOpen] = useState(false);
+  const [arenaCalculatorDragging, setArenaCalculatorDragging] = useState(false);
+  const [arenaCalculatorFrame, setArenaCalculatorFrame] = useState({ x: 860, y: 92, width: 430, height: 540 });
+  const [reviewIndex, setReviewIndex] = useState(0);
+  const [openReviewExplanation, setOpenReviewExplanation] = useState<Record<string, boolean>>({});
 
   const selectedModuleGroups = useMemo(
     () =>
@@ -1368,6 +1406,8 @@ function ArenaView({ currentUser }: { currentUser: UserProfile }) {
   const selfPlayer = room?.players.find((player) => player.userId === currentUser.id);
   const sortedPlayers = [...(room?.players ?? [])].sort((a, b) => b.score - a.score);
   const isFreeResponseArena = Boolean(currentArenaQuestion && currentArenaQuestion.choices.length <= 1);
+  const isArenaMath = currentArenaQuestion?.section === "Math";
+  const cooldownSeconds = Math.max(0, Math.ceil((arenaCooldownUntil - arenaNow) / 1000));
 
   useEffect(() => {
     if (!room || room.status === "finished") return;
@@ -1392,8 +1432,32 @@ function ArenaView({ currentUser }: { currentUser: UserProfile }) {
   useEffect(() => {
     setQuestionStartedAt(Date.now());
     setFreeResponse("");
+    setArenaSelectedIndex(null);
+    setArenaCooldownUntil(0);
     setArenaFeedback("");
   }, [currentArenaQuestion?.id]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setArenaNow(Date.now()), 500);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const moveArenaCalculator = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!arenaCalculatorDragging) return;
+    setArenaCalculatorFrame((frame) => ({
+      ...frame,
+      x: Math.max(8, Math.min(window.innerWidth - 120, frame.x + event.movementX)),
+      y: Math.max(82, Math.min(window.innerHeight - 90, frame.y + event.movementY)),
+    }));
+  };
+
+  const toggleArenaEliminatedChoice = (questionId: string, choiceIndex: number) => {
+    setArenaEliminatedChoices((current) => {
+      const choices = current[questionId] ?? [];
+      const nextChoices = choices.includes(choiceIndex) ? choices.filter((index) => index !== choiceIndex) : [...choices, choiceIndex];
+      return { ...current, [questionId]: nextChoices };
+    });
+  };
 
   const toggleArenaSkill = (skill: string) => {
     setSelectedSkills((current) => (current.includes(skill) ? current.filter((item) => item !== skill) : [...current, skill]));
@@ -1463,7 +1527,7 @@ function ArenaView({ currentUser }: { currentUser: UserProfile }) {
   const startArena = () => room && runArenaAction(() => startArenaRoom({ roomId: room.id, userId: currentUser.id }));
 
   const submitArenaAnswer = async (selectedIndex?: number) => {
-    if (!room || !currentArenaQuestion || selfPlayer?.answeredCurrent) return;
+    if (!room || !currentArenaQuestion || selfPlayer?.answeredCurrent || cooldownSeconds > 0) return;
     setArenaLoading(true);
     setArenaError("");
     try {
@@ -1476,9 +1540,20 @@ function ArenaView({ currentUser }: { currentUser: UserProfile }) {
         elapsedMs: Date.now() - questionStartedAt,
       });
       setRoom(result.room);
-      setArenaFeedback(result.correct ? `Correct +${result.scoreAwarded}` : `Wrong. Try again, -250 next correct score.`);
+      if (!result.correct) {
+        if (typeof selectedIndex === "number") {
+          setArenaWrongChoices((current) => ({
+            ...current,
+            [currentArenaQuestion.id]: [...new Set([...(current[currentArenaQuestion.id] ?? []), selectedIndex])],
+          }));
+        }
+        setArenaCooldownUntil(Date.now() + (result.waitMs ?? 15_000));
+      }
+      setArenaFeedback(result.correct ? `Correct +${result.scoreAwarded}` : `Wrong: -250 points. Try again in 15 seconds.`);
     } catch (error) {
-      setArenaError(error instanceof Error ? error.message : "Could not submit answer.");
+      const message = error instanceof Error ? error.message : "Could not submit answer.";
+      setArenaError(message);
+      if (message.includes("Wait")) setArenaCooldownUntil(Date.now() + 15_000);
     } finally {
       setArenaLoading(false);
     }
@@ -1609,13 +1684,92 @@ function ArenaView({ currentUser }: { currentUser: UserProfile }) {
       <div className="arena-layout">
         <ArenaScoreboard players={sortedPlayers} />
         {room.status === "finished" ? (
-          <div className="arena-panel arena-winner">
-            <Trophy size={42} />
-            <h2>{room.winner?.nickname} scored {room.winner?.score}</h2>
-            <p>Final leaderboard is locked. Create a new room for another battle.</p>
+          <div className="arena-panel arena-review-panel">
+            <div className="arena-winner compact">
+              <Trophy size={34} />
+              <div>
+                <h2>{room.winner?.nickname} scored {room.winner?.score}</h2>
+                <p>Review every question, your answer, and the explanation.</p>
+              </div>
+            </div>
+            {room.review.length > 0 && (() => {
+              const reviewQuestion = room.review[Math.min(reviewIndex, room.review.length - 1)];
+              const reviewPrompt = splitPrompt(reviewQuestion.prompt);
+              const explanationOpen = openReviewExplanation[reviewQuestion.id];
+              return (
+                <div className="arena-review-card">
+                  <div className="arena-review-nav">
+                    <button className="ghost-button" disabled={reviewIndex <= 0} onClick={() => setReviewIndex((index) => Math.max(0, index - 1))}>Previous</button>
+                    <strong>{reviewIndex + 1}/{room.review.length}</strong>
+                    <button className="ghost-button" disabled={reviewIndex >= room.review.length - 1} onClick={() => setReviewIndex((index) => Math.min(room.review.length - 1, index + 1))}>Next</button>
+                  </div>
+                  <div className="arena-question-meta">
+                    <span>{reviewQuestion.section}</span>
+                    <span>{reviewQuestion.skill}</span>
+                    <span className={reviewQuestion.correct ? "review-correct" : "review-wrong"}>{reviewQuestion.correct ? "Correct" : "Wrong"}</span>
+                  </div>
+                  {reviewPrompt.passage && <p className="prompt-passage">{reviewPrompt.passage}</p>}
+                  {reviewQuestion.imagePath && <img className="question-image" src={reviewQuestion.imagePath} alt="Arena review question" />}
+                  <p className="prompt-question">{reviewPrompt.questionText}</p>
+                  {reviewQuestion.choices.length > 1 ? (
+                    <div className="arena-choices review">
+                      {reviewQuestion.choices.map((choice, index) => {
+                        const isSelected = reviewQuestion.selectedIndex === index;
+                        const isCorrect = reviewQuestion.correctIndex === index;
+                        return (
+                          <div key={`${reviewQuestion.id}-review-${index}`} className={["arena-review-choice", isSelected ? "selected" : "", isCorrect ? "correct" : "", isSelected && !isCorrect ? "wrong" : ""].join(" ")}>
+                            <span>{String.fromCharCode(65 + index)}</span>
+                            <em>{choice}</em>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className={reviewQuestion.correct ? "arena-feedback correct" : "arena-feedback"}>Your answer: {reviewQuestion.freeResponse || "No answer"} · Correct: {reviewQuestion.correctAnswer}</p>
+                  )}
+                  <button className="sat-explanation-button" onClick={() => setOpenReviewExplanation((current) => ({ ...current, [reviewQuestion.id]: !current[reviewQuestion.id] }))}>
+                    Explanation
+                  </button>
+                  {explanationOpen && <div className="sat-explanation correct"><p>{reviewQuestion.explanation}</p></div>}
+                </div>
+              );
+            })()}
           </div>
         ) : currentArenaQuestion && currentArenaPrompt ? (
           <div className="arena-question-card">
+            {isArenaMath && (
+              <div className="arena-tools">
+                <button className="ghost-button" onClick={() => setArenaCalculatorOpen((open) => !open)}>
+                  <Calculator size={15} />
+                  Calculator
+                </button>
+              </div>
+            )}
+            {isArenaMath && arenaCalculatorOpen && (
+              <aside
+                className="calculator-popover"
+                aria-label="Desmos calculator"
+                style={{ left: arenaCalculatorFrame.x, top: arenaCalculatorFrame.y, width: arenaCalculatorFrame.width, height: arenaCalculatorFrame.height }}
+              >
+                <div
+                  className="calculator-header"
+                  onPointerDown={(event) => {
+                    setArenaCalculatorDragging(true);
+                    event.currentTarget.setPointerCapture(event.pointerId);
+                  }}
+                  onPointerMove={moveArenaCalculator}
+                  onPointerUp={(event) => {
+                    setArenaCalculatorDragging(false);
+                    event.currentTarget.releasePointerCapture(event.pointerId);
+                  }}
+                  onPointerCancel={() => setArenaCalculatorDragging(false)}
+                >
+                  <strong>Desmos Calculator</strong>
+                  <button onClick={() => setArenaCalculatorOpen(false)}>Close</button>
+                </div>
+                <iframe title="Desmos calculator" src="https://www.desmos.com/calculator" />
+              </aside>
+            )}
             <div className="arena-question-meta">
               <span>{currentArenaQuestion.section}</span>
               <span>{currentArenaQuestion.skill}</span>
@@ -1627,20 +1781,35 @@ function ArenaView({ currentUser }: { currentUser: UserProfile }) {
             {isFreeResponseArena ? (
               <div className="arena-free-response">
                 <input value={freeResponse} onChange={(event) => setFreeResponse(event.target.value)} placeholder="Answer..." />
-                <button className="primary-button" onClick={() => submitArenaAnswer()} disabled={arenaLoading || selfPlayer?.answeredCurrent}>Submit</button>
+                <button className="primary-button" onClick={() => submitArenaAnswer()} disabled={arenaLoading || selfPlayer?.answeredCurrent || cooldownSeconds > 0 || !freeResponse.trim()}>
+                  {cooldownSeconds > 0 ? `${cooldownSeconds}s` : "Check"}
+                </button>
               </div>
             ) : (
               <div className="arena-choices">
-                {currentArenaQuestion.choices.map((choice, index) => (
-                  <button key={`${currentArenaQuestion.id}-${index}`} onClick={() => submitArenaAnswer(index)} disabled={arenaLoading || selfPlayer?.answeredCurrent}>
-                    <span>{String.fromCharCode(65 + index)}</span>
-                    {currentArenaQuestion.choiceImagePaths?.[index] && choice.startsWith("Choice ") ? (
-                      <img className="sat-choice-image" src={currentArenaQuestion.choiceImagePaths[index]} alt={`Choice ${String.fromCharCode(65 + index)}`} />
-                    ) : (
-                      <em>{choice}</em>
-                    )}
-                  </button>
-                ))}
+                {currentArenaQuestion.choices.map((choice, index) => {
+                  const wrong = arenaWrongChoices[currentArenaQuestion.id]?.includes(index);
+                  const eliminated = arenaEliminatedChoices[currentArenaQuestion.id]?.includes(index);
+                  const selected = arenaSelectedIndex === index;
+                  return (
+                    <div key={`${currentArenaQuestion.id}-${index}`} className={["arena-choice-row", selected ? "selected" : "", wrong ? "wrong" : "", eliminated ? "eliminated" : ""].join(" ")}>
+                      <button className="arena-choice-main" onClick={() => setArenaSelectedIndex(index)} disabled={arenaLoading || selfPlayer?.answeredCurrent}>
+                        <span>{String.fromCharCode(65 + index)}</span>
+                        {currentArenaQuestion.choiceImagePaths?.[index] && choice.startsWith("Choice ") ? (
+                          <img className="sat-choice-image" src={currentArenaQuestion.choiceImagePaths[index]} alt={`Choice ${String.fromCharCode(65 + index)}`} />
+                        ) : (
+                          <em>{choice}</em>
+                        )}
+                      </button>
+                      <button className="choice-strike-button" onClick={() => toggleArenaEliminatedChoice(currentArenaQuestion.id, index)}>
+                        <span>{String.fromCharCode(65 + index)}</span>
+                      </button>
+                    </div>
+                  );
+                })}
+                <button className="primary-button" onClick={() => arenaSelectedIndex !== null && submitArenaAnswer(arenaSelectedIndex)} disabled={arenaLoading || selfPlayer?.answeredCurrent || arenaSelectedIndex === null || cooldownSeconds > 0}>
+                  {cooldownSeconds > 0 ? `Wait ${cooldownSeconds}s` : "Check"}
+                </button>
               </div>
             )}
             {arenaFeedback && <p className="arena-feedback">{arenaFeedback}</p>}
