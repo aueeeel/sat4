@@ -89,6 +89,15 @@ export type ArenaRoom = {
   winner?: { userId: string; nickname: string; score: number } | null;
 };
 
+export type FriendMessage = {
+  id: string;
+  senderId: string;
+  receiverId: string;
+  body: string;
+  questionId?: string | null;
+  createdAt: string;
+};
+
 export const getStoredUser = () => readJson<UserProfile | null>(SESSION_USER_KEY, null);
 
 export const saveStoredUser = (user: UserProfile) => writeJson(SESSION_USER_KEY, user);
@@ -103,6 +112,38 @@ export const registerUser = async (payload: RegisterPayload) => {
 export const loginUser = async (payload: LoginPayload) => {
   const data = await requestJson<{ user: UserProfile }>("/api/auth/login", payload);
   return data.user;
+};
+
+export const awardUserElo = async (payload: { userId: string; delta: number }) => {
+  const data = await requestJson<{ user: UserProfile }>("/api/users/elo", payload);
+  return data.user;
+};
+
+export const getFriends = async (userId: string) => {
+  const data = await getJson<{ friends: UserProfile[] }>(`/api/friends?userId=${encodeURIComponent(userId)}`);
+  return data.friends;
+};
+
+export const searchFriend = async (userId: string, query: string) => {
+  const data = await getJson<{ user: UserProfile }>(`/api/friends/search?userId=${encodeURIComponent(userId)}&q=${encodeURIComponent(query)}`);
+  return data.user;
+};
+
+export const addFriend = async (payload: { userId: string; friendId: string }) => {
+  const data = await requestJson<{ friends: UserProfile[] }>("/api/friends/add", payload);
+  return data.friends;
+};
+
+export const getFriendMessages = async (userId: string, friendId: string) => {
+  const data = await getJson<{ messages: FriendMessage[] }>(
+    `/api/friends/messages?userId=${encodeURIComponent(userId)}&friendId=${encodeURIComponent(friendId)}`
+  );
+  return data.messages;
+};
+
+export const sendFriendMessage = async (payload: { senderId: string; receiverId: string; body: string; questionId?: string }) => {
+  const data = await requestJson<{ messages: FriendMessage[] }>("/api/friends/messages", payload);
+  return data.messages;
 };
 
 export const createArenaRoom = async (payload: {

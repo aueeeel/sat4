@@ -42,6 +42,7 @@ db.exec(`
     gmail TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
     password_salt TEXT NOT NULL,
+    elo INTEGER NOT NULL DEFAULT 400,
     joined_at TEXT NOT NULL
   );
 
@@ -88,6 +89,23 @@ db.exec(`
     answered_at TEXT,
     UNIQUE(room_id, user_id, question_id)
   );
+
+  CREATE TABLE IF NOT EXISTS friendships (
+    id TEXT PRIMARY KEY,
+    user_a TEXT NOT NULL,
+    user_b TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE(user_a, user_b)
+  );
+
+  CREATE TABLE IF NOT EXISTS friend_messages (
+    id TEXT PRIMARY KEY,
+    sender_id TEXT NOT NULL,
+    receiver_id TEXT NOT NULL,
+    body TEXT NOT NULL,
+    question_id TEXT,
+    created_at TEXT NOT NULL
+  );
 `);
 
 try {
@@ -97,6 +115,8 @@ try {
 }
 
 for (const migration of [
+  `ALTER TABLE users ADD COLUMN elo INTEGER NOT NULL DEFAULT 400;`,
+  `ALTER TABLE arena_rooms ADD COLUMN elo_awarded INTEGER NOT NULL DEFAULT 0;`,
   `ALTER TABLE arena_answers ADD COLUMN selected_index INTEGER;`,
   `ALTER TABLE arena_answers ADD COLUMN free_response TEXT;`,
   `ALTER TABLE arena_answers ADD COLUMN cooldown_until TEXT;`,
@@ -205,6 +225,7 @@ const publicUser = (row) => ({
   gmail: row.gmail,
   email: row.gmail,
   name: row.nickname || row.full_name,
+  elo: row.elo ?? 400,
   joinedAt: row.joined_at,
 });
 
@@ -218,9 +239,29 @@ const validateRegistration = ({ fullName, nickname, age, gmail, password }) => {
 };
 
 const findUserByGmail = db.prepare("SELECT * FROM users WHERE gmail = ?");
+const findUserById = db.prepare("SELECT * FROM users WHERE id = ?");
+const findUserByNickname = db.prepare("SELECT * FROM users WHERE lower(nickname) = lower(?)");
 const insertUser = db.prepare(`
-  INSERT INTO users (id, full_name, nickname, age, gmail, password_hash, password_salt, joined_at)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  INSERT INTO users (id, full_name, nickname, age, gmail, password_hash, password_salt, elo, joined_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+`);
+const updateUserElo = db.prepare("UPDATE users SET elo = max(0, elo + ?) WHERE id = ?");
+const getFriendship = db.prepare("SELECT * FROM friendships WHERE user_a = ? AND user_b = ?");
+const insertFriendship = db.prepare("INSERT OR IGNORE INTO friendships (id, user_a, user_b, created_at) VALUES (?, ?, ?, ?)");
+const getFriendRows = db.prepare(`
+  SELECT users.* FROM friendships
+  JOIN users ON users.id = CASE WHEN friendships.user_a = ? THEN friendships.user_b ELSE friendships.user_a END
+  WHERE friendships.user_a = ? OR friendships.user_b = ?
+  ORDER BY users.nickname COLLATE NOCASE ASC
+`);
+const getMessagesBetween = db.prepare(`
+  SELECT * FROM friend_messages
+  WHERE (sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?)
+  ORDER BY created_at ASC
+`);
+const insertFriendMessage = db.prepare(`
+  INSERT INTO friend_messages (id, sender_id, receiver_id, body, question_id, created_at)
+  VALUES (?, ?, ?, ?, ?, ?)
 `);
 
 const getRoomById = db.prepare("SELECT * FROM arena_rooms WHERE id = ?");
@@ -247,6 +288,7 @@ const startRoomStatement = db.prepare(`
   WHERE id = ? AND host_user_id = ? AND status = 'waiting'
 `);
 const finishRoomStatement = db.prepare("UPDATE arena_rooms SET status = 'finished' WHERE id = ?");
+const markRoomEloAwarded = db.prepare("UPDATE arena_rooms SET elo_awarded = 1 WHERE id = ? AND elo_awarded = 0");
 const advanceRoomStatement = db.prepare("UPDATE arena_rooms SET current_index = ? WHERE id = ?");
 const getAnswerRecord = db.prepare("SELECT * FROM arena_answers WHERE room_id = ? AND user_id = ? AND question_id = ?");
 const upsertAnswer = db.prepare(`
@@ -420,7 +462,7 @@ const server = createServer(async (request, response) => {
       const { hash, salt } = createPasswordRecord(password);
       const id = randomUUID();
       const joinedAt = new Date().toISOString();
-      insertUser.run(id, fullName, nickname, age, gmail, hash, salt, joinedAt);
+      insertUser.run(id, fullName, nickname, age, gmail, hash, salt, 400, joinedAt);
       json(response, 201, {
         user: publicUser({
           id,
@@ -428,6 +470,7 @@ const server = createServer(async (request, response) => {
           nickname,
           age,
           gmail,
+          elo: 400,
           joined_at: joinedAt,
         }),
       });
@@ -451,6 +494,98 @@ const server = createServer(async (request, response) => {
       }
 
       json(response, 200, { user: publicUser(user) });
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/users/elo") {
+      const body = await readBody(request);
+      const userId = String(body.userId ?? "");
+      const delta = Math.max(-20, Math.min(20, Number(body.delta ?? 0)));
+      if (!userId || !Number.isFinite(delta)) {
+        json(response, 400, { error: "User and ELO delta are required." });
+        return;
+      }
+      updateUserElo.run(delta, userId);
+      const user = findUserById.get(userId);
+      if (!user) {
+        json(response, 404, { error: "User not found." });
+        return;
+      }
+      json(response, 200, { user: publicUser(user) });
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/friends") {
+      const userId = url.searchParams.get("userId") ?? "";
+      const friends = getFriendRows.all(userId, userId, userId).map(publicUser);
+      json(response, 200, { friends });
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/friends/search") {
+      const query = String(url.searchParams.get("q") ?? "").trim();
+      const userId = String(url.searchParams.get("userId") ?? "");
+      const user = query ? (findUserById.get(query) ?? findUserByNickname.get(query)) : null;
+      if (!user || user.id === userId) {
+        json(response, 404, { error: "User not found." });
+        return;
+      }
+      json(response, 200, { user: publicUser(user) });
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/friends/add") {
+      const body = await readBody(request);
+      const userId = String(body.userId ?? "");
+      const friendId = String(body.friendId ?? "");
+      const user = findUserById.get(userId);
+      const friend = findUserById.get(friendId);
+      if (!user || !friend || userId === friendId) {
+        json(response, 400, { error: "Friend could not be added." });
+        return;
+      }
+      const [userA, userB] = [userId, friendId].sort();
+      insertFriendship.run(randomUUID(), userA, userB, new Date().toISOString());
+      json(response, 200, { friends: getFriendRows.all(userId, userId, userId).map(publicUser) });
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/friends/messages") {
+      const userId = url.searchParams.get("userId") ?? "";
+      const friendId = url.searchParams.get("friendId") ?? "";
+      const messages = getMessagesBetween.all(userId, friendId, friendId, userId).map((message) => ({
+        id: message.id,
+        senderId: message.sender_id,
+        receiverId: message.receiver_id,
+        body: message.body,
+        questionId: message.question_id,
+        createdAt: message.created_at,
+      }));
+      json(response, 200, { messages });
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/friends/messages") {
+      const body = await readBody(request);
+      const senderId = String(body.senderId ?? "");
+      const receiverId = String(body.receiverId ?? "");
+      const questionId = body.questionId ? String(body.questionId) : null;
+      const bodyText = String(body.body ?? "").trim().slice(0, 1000);
+      const [userA, userB] = [senderId, receiverId].sort();
+      if (!senderId || !receiverId || !bodyText || !getFriendship.get(userA, userB)) {
+        json(response, 400, { error: "Message could not be sent." });
+        return;
+      }
+      insertFriendMessage.run(randomUUID(), senderId, receiverId, bodyText, questionId, new Date().toISOString());
+      const messages = getMessagesBetween.all(senderId, receiverId, receiverId, senderId).map((message) => ({
+        id: message.id,
+        senderId: message.sender_id,
+        receiverId: message.receiver_id,
+        body: message.body,
+        questionId: message.question_id,
+        createdAt: message.created_at,
+      }));
+      json(response, 201, { messages });
       return;
     }
 
@@ -614,6 +749,11 @@ const server = createServer(async (request, response) => {
           questionIds.every((id) => getAnswerRecord.get(roomId, arenaPlayer.user_id, id)?.correct)
         );
         if (everyoneFinished) {
+          if (!room.elo_awarded) {
+            const rankedPlayers = [...players].sort((a, b) => b.score - a.score);
+            rankedPlayers.forEach((arenaPlayer, index) => updateUserElo.run(index === 0 ? 10 : 3, arenaPlayer.user_id));
+            markRoomEloAwarded.run(roomId);
+          }
           finishRoomStatement.run(roomId);
         } else {
           const slowestProgress = Math.min(

@@ -17,14 +17,18 @@
   LibraryBig,
   NotebookTabs,
   MoreHorizontal,
+  MessageCircle,
   Rocket,
   RotateCcw,
   Search,
+  Send,
   SlidersHorizontal,
   Sparkle,
   Star,
   Trophy,
+  UserPlus,
   UserRound,
+  Users,
   Video,
   X,
 } from "lucide-react";
@@ -33,11 +37,15 @@ import { questions, sourceNote } from "./data/questions";
 import vocabularyData from "./data/vocabulary.json";
 import {
   answerArenaQuestion,
+  addFriend,
+  awardUserElo,
   clearStoredUser,
   configureArenaRoom,
   createArenaRoom,
   getAnswers,
   getArenaRoom,
+  getFriendMessages,
+  getFriends,
   getStoredUser,
   joinArenaRoom,
   loginUser,
@@ -45,8 +53,11 @@ import {
   resetAnswers,
   saveAnswer,
   saveStoredUser,
+  searchFriend,
+  sendFriendMessage,
   startArenaRoom,
   type ArenaRoom,
+  type FriendMessage,
 } from "./storage";
 import type { AnswerRecord, Difficulty, Question, Section, UserProfile } from "./types";
 
@@ -172,7 +183,7 @@ export default function App() {
   const [authDialogOpen, setAuthDialogOpen] = useState(false);
   const [answersVersion, setAnswersVersion] = useState(0);
   const [activeSection, setActiveSection] = useState<Section>("Verbal");
-  const [bankView, setBankView] = useState<"home" | "topics" | "vocabulary" | "arena" | "study">(() => {
+  const [bankView, setBankView] = useState<"home" | "topics" | "vocabulary" | "arena" | "study" | "friends">(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get("arena") ? "arena" : "home";
   });
@@ -185,6 +196,7 @@ export default function App() {
   const [freeResponseValue, setFreeResponseValue] = useState("");
   const [eliminatedChoices, setEliminatedChoices] = useState<Record<string, number[]>>({});
   const [wrongPracticeChoices, setWrongPracticeChoices] = useState<Record<string, number[]>>({});
+  const [shareQuestion, setShareQuestion] = useState<Question | null>(null);
   const [openExplanationIds, setOpenExplanationIds] = useState<string[]>([]);
   const [practiceMode, setPracticeMode] = useState(false);
   const [calculatorOpen, setCalculatorOpen] = useState(false);
@@ -303,6 +315,18 @@ export default function App() {
   const totalAccuracy = totalAnswered ? Math.round((totalCorrect / totalAnswered) * 100) : 0;
   const practiceTimer = formatTimer(Math.floor((currentTime - practiceStartedAt) / 1000));
 
+  const applyEloDelta = (delta: number) => {
+    if (!currentUser) return;
+    awardUserElo({ userId: currentUser.id, delta })
+      .then((user) => {
+        setCurrentUser(user);
+        saveStoredUser(user);
+      })
+      .catch(() => {
+        // ELO is a bonus layer; answering should never fail because of it.
+      });
+  };
+
   const getQuestionSet = (section: Section, domain = "All", skill = "All") =>
     questions.filter((question) => {
       const matchesSection = question.section === section;
@@ -398,6 +422,7 @@ export default function App() {
         [question.id]: [...new Set([...(current[question.id] ?? []), choiceIndex])],
       }));
     }
+    if (correct && !activeAnswer?.correct) applyEloDelta(1);
     saveAnswer(currentUser.id, record);
     setAnswersVersion((value) => value + 1);
   };
@@ -422,6 +447,7 @@ export default function App() {
       answeredAt: new Date().toISOString(),
     };
     setSelectedIndex(0);
+    if (correct && !activeAnswer?.correct) applyEloDelta(1);
     saveAnswer(currentUser.id, record);
     setAnswersVersion((value) => value + 1);
   };
@@ -796,6 +822,10 @@ export default function App() {
             <button className="sat-explanation-button" onClick={() => toggleExplanation(activeQuestion.id)}>
               Explanation
             </button>
+            <button className="sat-explanation-button" onClick={() => setShareQuestion(activeQuestion)}>
+              <Send size={15} />
+              Send
+            </button>
             {!isFreeResponse && (
               <button
                 className="sat-explanation-button"
@@ -884,6 +914,16 @@ export default function App() {
                 window.scrollTo({ top: 0, behavior: "smooth" });
               },
             },
+            {
+              id: "friends",
+              label: "Friends",
+              icon: <Users size={17} />,
+              active: bankView === "friends",
+              onClick: () => {
+                setBankView("friends");
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              },
+            },
           ]}
         />
         <button className="profile-button" onClick={signOut} title="Sign out">
@@ -897,6 +937,23 @@ export default function App() {
         <ArenaView currentUser={currentUser} />
       ) : bankView === "study" ? (
         <StudyRoomView currentUser={currentUser} />
+      ) : bankView === "friends" ? (
+        <FriendsView
+          currentUser={currentUser}
+          totalAnswered={totalAnswered}
+          totalAccuracy={totalAccuracy}
+          onOpenQuestion={(questionId) => {
+            const question = questions.find((item) => item.id === questionId);
+            if (!question) return;
+            changeSection(question.section);
+            setActiveDomain(question.domain);
+            setActiveSkill(question.skill);
+            setActiveQuestionId(question.id);
+            setSelectedIndex(answerMap.get(question.id)?.selectedIndex ?? null);
+            setFreeResponseValue(answerMap.get(question.id)?.freeResponse ?? "");
+            setBankView("topics");
+          }}
+        />
       ) : bankView === "vocabulary" ? (
         <VocabularyView />
       ) : bankView === "home" ? (
@@ -1289,6 +1346,9 @@ export default function App() {
           ))}
         </div>
       </section>
+      {shareQuestion && (
+        <SendQuestionDialog currentUser={currentUser} question={shareQuestion} onClose={() => setShareQuestion(null)} />
+      )}
     </main>
   );
 }
@@ -1974,6 +2034,194 @@ function ArenaScoreboard({ players }: { players: ArenaRoom["players"] }) {
         </div>
       ))}
     </aside>
+  );
+}
+
+function FriendsView({
+  currentUser,
+  totalAnswered,
+  totalAccuracy,
+  onOpenQuestion,
+}: {
+  currentUser: UserProfile;
+  totalAnswered: number;
+  totalAccuracy: number;
+  onOpenQuestion: (questionId: string) => void;
+}) {
+  const [friends, setFriends] = useState<UserProfile[]>([]);
+  const [activeFriendId, setActiveFriendId] = useState("");
+  const [messages, setMessages] = useState<FriendMessage[]>([]);
+  const [friendQuery, setFriendQuery] = useState("");
+  const [friendResult, setFriendResult] = useState<UserProfile | null>(null);
+  const [friendsError, setFriendsError] = useState("");
+  const [chatText, setChatText] = useState("");
+  const activeFriend = friends.find((friend) => friend.id === activeFriendId) ?? friends[0] ?? null;
+
+  useEffect(() => {
+    getFriends(currentUser.id)
+      .then((items) => {
+        setFriends(items);
+        if (!activeFriendId && items[0]) setActiveFriendId(items[0].id);
+      })
+      .catch((error) => setFriendsError(error instanceof Error ? error.message : "Could not load friends."));
+  }, [currentUser.id]);
+
+  useEffect(() => {
+    if (!activeFriend) {
+      setMessages([]);
+      return;
+    }
+    getFriendMessages(currentUser.id, activeFriend.id)
+      .then(setMessages)
+      .catch((error) => setFriendsError(error instanceof Error ? error.message : "Could not load messages."));
+  }, [activeFriend?.id, currentUser.id]);
+
+  const findFriend = async () => {
+    setFriendsError("");
+    setFriendResult(null);
+    try {
+      setFriendResult(await searchFriend(currentUser.id, friendQuery));
+    } catch (error) {
+      setFriendsError(error instanceof Error ? error.message : "User not found.");
+    }
+  };
+
+  const addFoundFriend = async () => {
+    if (!friendResult) return;
+    const nextFriends = await addFriend({ userId: currentUser.id, friendId: friendResult.id });
+    setFriends(nextFriends);
+    setActiveFriendId(friendResult.id);
+    setFriendResult(null);
+    setFriendQuery("");
+  };
+
+  const sendMessage = async () => {
+    if (!activeFriend || !chatText.trim()) return;
+    const nextMessages = await sendFriendMessage({
+      senderId: currentUser.id,
+      receiverId: activeFriend.id,
+      body: chatText.trim(),
+    });
+    setMessages(nextMessages);
+    setChatText("");
+  };
+
+  return (
+    <section className="friends-page">
+      <div className="friends-hero">
+        <p className="eyebrow">Friends</p>
+        <h1>Your SAT circle.</h1>
+        <p>Add friends, message them, and send practice tasks straight from the question bank.</p>
+      </div>
+
+      <div className="friends-layout">
+        <aside className="profile-panel">
+          <div className="profile-avatar">{currentUser.nickname.slice(0, 1).toUpperCase()}</div>
+          <h2>{currentUser.nickname}</h2>
+          <p>ID: {currentUser.id}</p>
+          <div className="profile-stat-grid">
+            <div><span>ELO</span><strong>{currentUser.elo ?? 400}</strong></div>
+            <div><span>Accuracy</span><strong>{totalAccuracy}%</strong></div>
+            <div><span>Solved</span><strong>{totalAnswered}</strong></div>
+          </div>
+        </aside>
+
+        <section className="friends-panel">
+          <div className="friend-search">
+            <input value={friendQuery} onChange={(event) => setFriendQuery(event.target.value)} placeholder="Nickname or user ID" />
+            <button className="primary-button" onClick={findFriend}><UserPlus size={16} /> Find</button>
+          </div>
+          {friendResult && (
+            <div className="friend-result">
+              <strong>{friendResult.nickname}</strong>
+              <span>ELO {friendResult.elo ?? 400}</span>
+              <button className="ghost-button" onClick={addFoundFriend}>Add friend</button>
+            </div>
+          )}
+          {friendsError && <p className="form-error">{friendsError}</p>}
+
+          <div className="friends-chat-layout">
+            <div className="friend-list">
+              {friends.length ? friends.map((friend) => (
+                <button key={friend.id} className={activeFriend?.id === friend.id ? "active" : ""} onClick={() => setActiveFriendId(friend.id)}>
+                  <span>{friend.nickname.slice(0, 1).toUpperCase()}</span>
+                  <strong>{friend.nickname}</strong>
+                  <em>{friend.elo ?? 400} ELO</em>
+                </button>
+              )) : <p>Add a friend to start chatting.</p>}
+            </div>
+
+            <div className="chat-panel">
+              <header>
+                <MessageCircle size={18} />
+                <strong>{activeFriend ? activeFriend.nickname : "No friend selected"}</strong>
+              </header>
+              <div className="chat-messages">
+                {messages.map((message) => (
+                  <div key={message.id} className={message.senderId === currentUser.id ? "chat-message mine" : "chat-message"}>
+                    <p>{message.body}</p>
+                    {message.questionId && <button onClick={() => onOpenQuestion(message.questionId!)}>Open task</button>}
+                  </div>
+                ))}
+              </div>
+              <div className="chat-compose">
+                <input value={chatText} onChange={(event) => setChatText(event.target.value)} placeholder="Write a message..." disabled={!activeFriend} />
+                <button className="primary-button" onClick={sendMessage} disabled={!activeFriend || !chatText.trim()}><Send size={15} /> Send</button>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+  );
+}
+
+function SendQuestionDialog({ currentUser, question, onClose }: { currentUser: UserProfile; question: Question; onClose: () => void }) {
+  const [friends, setFriends] = useState<UserProfile[]>([]);
+  const [selectedFriendId, setSelectedFriendId] = useState("");
+  const [status, setStatus] = useState("");
+
+  useEffect(() => {
+    getFriends(currentUser.id).then((items) => {
+      setFriends(items);
+      if (items[0]) setSelectedFriendId(items[0].id);
+    });
+  }, [currentUser.id]);
+
+  const sendTask = async () => {
+    if (!selectedFriendId) return;
+    await sendFriendMessage({
+      senderId: currentUser.id,
+      receiverId: selectedFriendId,
+      body: `Sent you a ${question.section} task: ${question.skill}`,
+      questionId: question.id,
+    });
+    setStatus("Sent!");
+    window.setTimeout(onClose, 900);
+  };
+
+  return (
+    <div className="friend-dialog-backdrop" role="presentation">
+      <section className="friend-dialog" role="dialog" aria-modal="true">
+        <header>
+          <div>
+            <p className="eyebrow">Send task</p>
+            <h2>{question.skill}</h2>
+          </div>
+          <button className="ghost-button" onClick={onClose}>Close</button>
+        </header>
+        {friends.length ? (
+          <>
+            <select value={selectedFriendId} onChange={(event) => setSelectedFriendId(event.target.value)}>
+              {friends.map((friend) => <option key={friend.id} value={friend.id}>{friend.nickname}</option>)}
+            </select>
+            <button className="primary-button full" onClick={sendTask}>{status || "Send to friend"}</button>
+          </>
+        ) : (
+          <p>Add friends first in the Friends tab.</p>
+        )}
+      </section>
+    </div>
   );
 }
 

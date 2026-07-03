@@ -34,5 +34,6 @@ export type UserProfile = {
   gmail: string;
   email: string;
   name: string;
+  elo: number;
   joinedAt: string;
 };
