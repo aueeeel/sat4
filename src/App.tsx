@@ -25,6 +25,7 @@
   Star,
   Trophy,
   UserRound,
+  Video,
   X,
 } from "lucide-react";
 import { CSSProperties, FormEvent, PointerEvent as ReactPointerEvent, ReactNode, useEffect, useMemo, useState } from "react";
@@ -171,7 +172,7 @@ export default function App() {
   const [authDialogOpen, setAuthDialogOpen] = useState(false);
   const [answersVersion, setAnswersVersion] = useState(0);
   const [activeSection, setActiveSection] = useState<Section>("Verbal");
-  const [bankView, setBankView] = useState<"home" | "topics" | "vocabulary" | "arena">(() => {
+  const [bankView, setBankView] = useState<"home" | "topics" | "vocabulary" | "arena" | "study">(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get("arena") ? "arena" : "home";
   });
@@ -873,6 +874,16 @@ export default function App() {
                 window.scrollTo({ top: 0, behavior: "smooth" });
               },
             },
+            {
+              id: "study",
+              label: "Study Room",
+              icon: <Video size={17} />,
+              active: bankView === "study",
+              onClick: () => {
+                setBankView("study");
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              },
+            },
           ]}
         />
         <button className="profile-button" onClick={signOut} title="Sign out">
@@ -884,6 +895,8 @@ export default function App() {
 
       {bankView === "arena" ? (
         <ArenaView currentUser={currentUser} />
+      ) : bankView === "study" ? (
+        <StudyRoomView currentUser={currentUser} />
       ) : bankView === "vocabulary" ? (
         <VocabularyView />
       ) : bankView === "home" ? (
@@ -1961,6 +1974,83 @@ function ArenaScoreboard({ players }: { players: ArenaRoom["players"] }) {
         </div>
       ))}
     </aside>
+  );
+}
+
+const studyRooms = [
+  {
+    id: "silent-sat-hall",
+    title: "Silent SAT Hall",
+    subtitle: "Quiet camera-on room for focused solo practice.",
+    accent: "mint",
+  },
+  {
+    id: "math-focus-room",
+    title: "Math Focus",
+    subtitle: "Solve Math modules together while staying muted.",
+    accent: "blue",
+  },
+  {
+    id: "reading-writing-room",
+    title: "Reading & Writing",
+    subtitle: "Shared study space for Verbal practice blocks.",
+    accent: "pink",
+  },
+  {
+    id: "homework-lounge",
+    title: "Homework Lounge",
+    subtitle: "Open room for accountability and light study.",
+    accent: "purple",
+  },
+];
+
+function StudyRoomView({ currentUser }: { currentUser: UserProfile }) {
+  const [activeRoomId, setActiveRoomId] = useState(studyRooms[0].id);
+  const activeRoom = studyRooms.find((room) => room.id === activeRoomId) ?? studyRooms[0];
+  const roomName = `4sat-${activeRoom.id}`;
+  const displayName = encodeURIComponent(currentUser.nickname || currentUser.name || "4sat student");
+  const videoUrl = `https://meet.jit.si/${roomName}#userInfo.displayName=\"${displayName}\"&config.startWithAudioMuted=true&config.startSilent=true&config.prejoinConfig.enabled=false&interfaceConfig.TOOLBAR_BUTTONS=[\"camera\",\"tileview\",\"hangup\"]`;
+
+  return (
+    <section className="study-page">
+      <div className="study-hero">
+        <p className="eyebrow">Study Room</p>
+        <h1>Camera-on study rooms.</h1>
+        <p>Pick a room, join the call inside 4sat, and study together with microphones disabled.</p>
+      </div>
+
+      <div className="study-layout">
+        <aside className="study-room-list">
+          {studyRooms.map((room) => (
+            <button
+              key={room.id}
+              className={activeRoom.id === room.id ? `study-room-card active ${room.accent}` : `study-room-card ${room.accent}`}
+              onClick={() => setActiveRoomId(room.id)}
+            >
+              <span><Video size={17} /></span>
+              <strong>{room.title}</strong>
+              <em>{room.subtitle}</em>
+            </button>
+          ))}
+        </aside>
+
+        <article className="study-video-panel">
+          <div className="study-video-head">
+            <div>
+              <span>Live room</span>
+              <h2>{activeRoom.title}</h2>
+            </div>
+            <p>Mic is hidden and muted. Camera can be enabled inside the room.</p>
+          </div>
+          <iframe
+            title={`${activeRoom.title} study room`}
+            src={videoUrl}
+            allow="camera; display-capture; fullscreen"
+            referrerPolicy="strict-origin-when-cross-origin"
+          />
+        </article>
+      </div>
+    </section>
   );
 }
 
