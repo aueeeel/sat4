@@ -1843,6 +1843,45 @@ input:focus {
   padding: 20px;
 }
 
+.arena-invite-card {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(220px, 1.4fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(96, 65, 183, 0.18);
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at 0 0, rgba(84, 226, 192, 0.12), transparent 34%),
+    #fbfcff;
+}
+
+.arena-invite-card strong {
+  display: block;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.arena-invite-card p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.arena-invite-card input {
+  min-width: 0;
+  height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--ink);
+  background: #ffffff;
+  font-size: 12px;
+  font-weight: 750;
+}
+
 .arena-layout {
   grid-template-columns: 320px minmax(0, 1fr);
   align-items: start;
@@ -3273,6 +3312,10 @@ input:focus {
 
   .sat-stage {
     overflow: auto;
+  }
+
+  .arena-invite-card {
+    grid-template-columns: 1fr;
   }
 
   .sat-reading-pane {

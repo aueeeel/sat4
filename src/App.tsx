@@ -171,7 +171,10 @@ export default function App() {
   const [authDialogOpen, setAuthDialogOpen] = useState(false);
   const [answersVersion, setAnswersVersion] = useState(0);
   const [activeSection, setActiveSection] = useState<Section>("Verbal");
-  const [bankView, setBankView] = useState<"home" | "topics" | "vocabulary" | "arena">("home");
+  const [bankView, setBankView] = useState<"home" | "topics" | "vocabulary" | "arena">(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("arena") ? "arena" : "home";
+  });
   const [activeDomain, setActiveDomain] = useState("All");
   const [activeSkill, setActiveSkill] = useState("All");
   const [activeDifficulty, setActiveDifficulty] = useState<Difficulty | "All">("All");
@@ -1380,11 +1383,13 @@ function FragmentedPageButton({
 }
 
 function ArenaView({ currentUser }: { currentUser: UserProfile }) {
+  const inviteParams = new URLSearchParams(window.location.search);
   const [room, setRoom] = useState<ArenaRoom | null>(null);
-  const [arenaMode, setArenaMode] = useState<"create" | "join">("create");
-  const [roomPassword, setRoomPassword] = useState("");
-  const [joinCode, setJoinCode] = useState("");
+  const [arenaMode, setArenaMode] = useState<"create" | "join">(inviteParams.get("arena") ? "join" : "create");
+  const [roomPassword, setRoomPassword] = useState(inviteParams.get("password") ?? "");
+  const [joinCode, setJoinCode] = useState((inviteParams.get("arena") ?? "").toUpperCase());
   const [arenaError, setArenaError] = useState("");
+  const [inviteCopied, setInviteCopied] = useState(false);
   const [arenaLoading, setArenaLoading] = useState(false);
   const [selectedSections, setSelectedSections] = useState<Section[]>(["Math"]);
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
@@ -1423,6 +1428,10 @@ function ArenaView({ currentUser }: { currentUser: UserProfile }) {
   const isFreeResponseArena = Boolean(currentArenaQuestion && currentArenaQuestion.choices.length <= 1);
   const isArenaMath = currentArenaQuestion?.section === "Math";
   const cooldownSeconds = Math.max(0, Math.ceil((arenaCooldownUntil - arenaNow) / 1000));
+  const inviteLink =
+    room && typeof window !== "undefined"
+      ? `${window.location.origin}${window.location.pathname}?arena=${encodeURIComponent(room.code)}&password=${encodeURIComponent(roomPassword)}`
+      : "";
 
   useEffect(() => {
     if (!room || room.status === "finished") return;
@@ -1524,6 +1533,13 @@ function ArenaView({ currentUser }: { currentUser: UserProfile }) {
         password: roomPassword,
       })
     );
+
+  const copyInviteLink = async () => {
+    if (!inviteLink) return;
+    await navigator.clipboard.writeText(inviteLink);
+    setInviteCopied(true);
+    window.setTimeout(() => setInviteCopied(false), 1800);
+  };
 
   const saveArenaConfig = () =>
     room &&
@@ -1650,6 +1666,14 @@ function ArenaView({ currentUser }: { currentUser: UserProfile }) {
         <div className="arena-layout">
           <ArenaScoreboard players={sortedPlayers} />
           <div className="arena-panel">
+            <div className="arena-invite-card">
+              <div>
+                <strong>Invite link</strong>
+                <p>Send this link so friends can join without typing the room code.</p>
+              </div>
+              <input readOnly value={inviteLink} onFocus={(event) => event.currentTarget.select()} />
+              <button className="ghost-button" onClick={copyInviteLink}>{inviteCopied ? "Copied!" : "Copy link"}</button>
+            </div>
             {room.isHost ? (
               <>
                 <ArenaSettings
