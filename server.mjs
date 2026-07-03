@@ -7,7 +7,7 @@ import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypt
 import { DatabaseSync } from "node:sqlite";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const dataDir = process.env.DATA_DIR ?? (process.env.RENDER ? "/var/data" : join(__dirname, "data"));
+const dataDir = process.env.DATA_DIR ?? join(__dirname, "data");
 const dbPath = join(dataDir, "4sat.sqlite");
 const distDir = join(__dirname, "dist");
 const port = Number(process.env.PORT ?? 3001);
