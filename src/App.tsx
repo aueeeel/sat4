@@ -180,6 +180,7 @@ export default function App() {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [freeResponseValue, setFreeResponseValue] = useState("");
   const [eliminatedChoices, setEliminatedChoices] = useState<Record<string, number[]>>({});
+  const [wrongPracticeChoices, setWrongPracticeChoices] = useState<Record<string, number[]>>({});
   const [openExplanationIds, setOpenExplanationIds] = useState<string[]>([]);
   const [practiceMode, setPracticeMode] = useState(false);
   const [calculatorOpen, setCalculatorOpen] = useState(false);
@@ -379,13 +380,20 @@ export default function App() {
 
   const submitAnswer = (question: Question, choiceIndex: number) => {
     if (!currentUser) return;
+    const correct = choiceIndex === question.correctIndex;
     const record: AnswerRecord = {
       questionId: question.id,
       selectedIndex: choiceIndex,
-      correct: choiceIndex === question.correctIndex,
+      correct,
       answeredAt: new Date().toISOString(),
     };
     setSelectedIndex(choiceIndex);
+    if (!correct) {
+      setWrongPracticeChoices((current) => ({
+        ...current,
+        [question.id]: [...new Set([...(current[question.id] ?? []), choiceIndex])],
+      }));
+    }
     saveAnswer(currentUser.id, record);
     setAnswersVersion((value) => value + 1);
   };
@@ -707,10 +715,11 @@ export default function App() {
               ) : (
                 <div className="sat-choices">
                   {activeQuestion.choices.map((choice, index) => {
-                    const answered = Boolean(activeAnswer);
+                    const answered = Boolean(activeAnswer?.correct);
                     const isCorrect = index === activeQuestion.correctIndex;
-                    const isSelected = (activeAnswer?.selectedIndex ?? selectedIndex) === index;
+                    const isSelected = (selectedIndex ?? activeAnswer?.selectedIndex) === index;
                     const isEliminated = eliminatedChoices[activeQuestion.id]?.includes(index);
+                    const isWrongAttempt = wrongPracticeChoices[activeQuestion.id]?.includes(index) || (!activeAnswer?.correct && activeAnswer?.selectedIndex === index);
                     const showCorrect = (answered && isSelected && isCorrect) || (sessionComplete && isCorrect);
                     const choiceImage = activeQuestion.choiceImagePaths?.[index];
                     return (
@@ -721,7 +730,7 @@ export default function App() {
                           isSelected ? "selected" : "",
                           isEliminated ? "eliminated" : "",
                           showCorrect ? "correct" : "",
-                          answered && isSelected && !isCorrect ? "wrong" : "",
+                          isWrongAttempt ? "wrong" : "",
                         ].join(" ")}
                       >
                         <button className="sat-choice-main" onClick={() => setSelectedIndex(index)}>
@@ -732,7 +741,7 @@ export default function App() {
                             <em>{choice}</em>
                           )}
                           {showCorrect && <Check size={18} />}
-                          {answered && isSelected && !isCorrect && <X size={18} />}
+                          {isWrongAttempt && <X size={18} />}
                         </button>
                         <button
                           className="choice-strike-button"
@@ -783,7 +792,7 @@ export default function App() {
             {!isFreeResponse && (
               <button
                 className="sat-explanation-button"
-                disabled={selectedIndex === null || Boolean(activeAnswer)}
+                disabled={selectedIndex === null || Boolean(activeAnswer?.correct) || selectedIndex === activeAnswer?.selectedIndex}
                 onClick={() => selectedIndex !== null && submitAnswer(activeQuestion, selectedIndex)}
               >
                 Check
