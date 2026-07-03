@@ -12,7 +12,7 @@
 1. Push this project to GitHub.
 2. In Render, create a new Blueprint from this repo, or create a Web Service manually.
 3. Use:
-   - Build Command: `npm install && npm run build`
+   - Build Command: `npm install --include=dev && npm run build`
    - Start Command: `npm start`
 4. Deploy and open the Render URL.
 
