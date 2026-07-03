@@ -4,7 +4,8 @@
 
 - `npm run build` creates the frontend in `dist`.
 - `npm start` runs `server.mjs`, serves the API, and serves the built frontend.
-- SQLite uses `DATA_DIR` when provided. On Render, set it to `/var/data` with a persistent disk.
+- SQLite uses local storage by default on the free Render plan.
+- For permanent user accounts, upgrade the service and add a persistent disk with `DATA_DIR=/var/data`.
 
 ## Render setup
 
@@ -13,10 +14,11 @@
 3. Use:
    - Build Command: `npm install && npm run build`
    - Start Command: `npm start`
-   - Environment Variable: `DATA_DIR=/var/data`
-4. Add a persistent disk:
-   - Mount Path: `/var/data`
-   - Size: `1 GB`
-5. Deploy and open the Render URL.
+4. Deploy and open the Render URL.
 
-Without a persistent disk, registered users and Arena rooms can reset when the service restarts.
+On the free plan, registered users and Arena rooms can reset when the service restarts.
+For permanent storage, add:
+
+- Environment Variable: `DATA_DIR=/var/data`
+- Persistent Disk Mount Path: `/var/data`
+- Persistent Disk Size: `1 GB`
