@@ -815,11 +815,33 @@ input:focus {
   transform: translateY(-1px);
 }
 
+.landing-continuation {
+  position: relative;
+  z-index: 2;
+  margin-top: -42vh;
+  padding: 42vh 0 96px;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(232, 252, 226, 0.06) 0%, rgba(222, 248, 214, 0.92) 12%, #edf9e8 44%, #f7fbf3 100%);
+}
+
+.landing-continuation::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: min(560px, 62vw);
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(237, 249, 232, 0) 0%, rgba(237, 249, 232, 0.42) 62%, #edf9e8 100%),
+    url("/landing/plants-transition.png") center top / cover no-repeat;
+  opacity: 0.88;
+}
+
 .landing-stats {
   position: relative;
   z-index: 3;
   width: min(1120px, calc(100% - 48px));
-  margin: -42vh auto 34px;
+  margin: 0 auto 34px;
   transform: translateZ(0);
 }
 
@@ -831,9 +853,9 @@ input:focus {
   margin-left: auto;
   margin-right: auto;
   background:
-    radial-gradient(circle at 78% 30%, rgba(84, 226, 192, 0.18), transparent 34%),
-    radial-gradient(circle at 35% 82%, rgba(233, 65, 150, 0.12), transparent 30%),
-    rgba(255, 255, 255, 0.9);
+    radial-gradient(circle at 78% 30%, rgba(114, 217, 121, 0.18), transparent 34%),
+    radial-gradient(circle at 35% 82%, rgba(255, 255, 255, 0.72), transparent 30%),
+    rgba(255, 255, 255, 0.88);
   backdrop-filter: blur(18px);
 }
 
@@ -4778,8 +4800,9 @@ input:focus {
     width: calc(100% - 24px);
   }
 
-  .landing-stats {
+  .landing-continuation {
     margin-top: -38vh;
+    padding-top: 38vh;
   }
 
   .topic-progress,

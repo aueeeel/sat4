@@ -1025,17 +1025,19 @@ export default function App() {
             </div>
           </section>
 
-          <section className="landing-stats" aria-label="Overall progress">
-            <div className="stats-strip">
-              <Metric icon={<ClipboardCheck size={20} />} label="Answered" value={`${totalAnswered}/${questions.length}`} />
-              <Metric icon={<Gauge size={20} />} label="Accuracy" value={`${totalAccuracy}%`} />
-              <Metric icon={<Trophy size={20} />} label="Correct" value={String(totalCorrect)} />
-            </div>
-          </section>
+          <div className="landing-continuation">
+            <section className="landing-stats" aria-label="Overall progress">
+              <div className="stats-strip">
+                <Metric icon={<ClipboardCheck size={20} />} label="Answered" value={`${totalAnswered}/${questions.length}`} />
+                <Metric icon={<Gauge size={20} />} label="Accuracy" value={`${totalAccuracy}%`} />
+                <Metric icon={<Trophy size={20} />} label="Correct" value={String(totalCorrect)} />
+              </div>
+            </section>
 
-          <StudentResultsShowcase />
+            <StudentResultsShowcase />
 
-          <FeatureCardsShowcase />
+            <FeatureCardsShowcase />
+          </div>
         </>
       ) : bankView === "bank" ? (
           <section id="bank" className="question-bank-home">
