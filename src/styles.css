@@ -62,7 +62,7 @@ a {
 
 .auth-shell,
 .app-shell {
-  width: min(1480px, calc(100% - 32px));
+  width: min(1280px, calc(100% - 48px));
   margin: 0 auto;
 }
 
@@ -163,16 +163,37 @@ a {
 }
 
 .primary-button {
-  border: 1px solid var(--bubble);
+  --btn-bg-1: hsla(194 100% 69% / 1);
+  --btn-bg-2: hsla(217 100% 56% / 1);
+  --btn-bg-color: hsla(360 100% 100% / 1);
+  border: 0;
   color: #ffffff;
-  background: var(--bubble);
+  background-size: 280% auto;
+  background-image: linear-gradient(325deg, var(--btn-bg-2) 0%, var(--btn-bg-1) 55%, var(--btn-bg-2) 90%);
+  box-shadow:
+    0 0 20px rgba(71, 184, 255, 0.5),
+    0 5px 5px -1px rgba(58, 125, 233, 0.25),
+    inset 4px 4px 8px rgba(175, 230, 255, 0.5),
+    inset -4px -4px 8px rgba(19, 95, 216, 0.35);
+  transition:
+    background-position 0.8s ease,
+    transform 0.28s ease,
+    box-shadow 0.28s ease;
 }
 
 .primary-button:hover {
-  border-color: var(--cherry);
-  background: var(--cherry);
-  box-shadow: 0 16px 30px -22px rgba(182, 37, 91, 0.9);
+  background-position: right top;
   transform: translateY(-1px);
+}
+
+.primary-button:is(:focus, :focus-visible, :active) {
+  outline: none;
+  box-shadow:
+    0 0 0 3px #ffffff,
+    0 0 0 6px hsla(217 100% 56% / 1),
+    0 0 20px rgba(71, 184, 255, 0.5),
+    inset 4px 4px 8px rgba(175, 230, 255, 0.5),
+    inset -4px -4px 8px rgba(19, 95, 216, 0.35);
 }
 
 .secondary-button:hover,
@@ -228,7 +249,7 @@ button:disabled {
 .dashboard-copy h1 {
   margin: 0;
   color: #0b1120;
-  font-size: clamp(48px, 7vw, 88px);
+  font-size: clamp(44px, 5.6vw, 74px);
   line-height: 0.98;
   letter-spacing: 0;
 }
@@ -571,11 +592,11 @@ input:focus {
 
 .dashboard {
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) 390px;
-  gap: 42px;
+  grid-template-columns: minmax(0, 1fr) 330px;
+  gap: 34px;
   align-items: end;
-  min-height: clamp(620px, calc(100vh - 150px), 820px);
-  padding: clamp(72px, 8vw, 118px) clamp(42px, 6vw, 88px) clamp(58px, 6vw, 78px);
+  min-height: clamp(500px, calc(100vh - 210px), 650px);
+  padding: clamp(54px, 6vw, 82px) clamp(34px, 5vw, 64px) clamp(44px, 5vw, 60px);
   position: relative;
   z-index: 1;
 }
@@ -608,6 +629,13 @@ input:focus {
   white-space: nowrap;
 }
 
+.score-headline {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.18em;
+  white-space: nowrap;
+}
+
 .score-typewriter i {
   display: inline-block;
   color: var(--mint);
@@ -627,7 +655,7 @@ input:focus {
   grid-template-columns: minmax(280px, 0.72fr) minmax(0, 1.28fr);
   gap: clamp(28px, 5vw, 72px);
   align-items: center;
-  min-height: 420px;
+  min-height: 390px;
   margin: 0 0 34px;
   padding: clamp(38px, 6vw, 70px);
   overflow: hidden;
@@ -675,19 +703,19 @@ input:focus {
 .results-carousel-wrapper {
   position: relative;
   z-index: 1;
-  min-height: 360px;
+  min-height: 320px;
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
+  overflow: visible;
   perspective: 1000px;
 }
 
 .results-carousel-inner {
   position: absolute;
-  --w: 150px;
-  --h: 208px;
-  --translateZ: 360px;
+  --w: 116px;
+  --h: 162px;
+  --translateZ: 255px;
   --rotateX: -15deg;
   --perspective: 1000px;
   width: var(--w);
@@ -697,7 +725,7 @@ input:focus {
   z-index: 2;
   transform-style: preserve-3d;
   transform: perspective(var(--perspective));
-  animation: resultRotating 20s linear infinite;
+  animation: resultRotating 38s linear infinite;
 }
 
 .result-photo-card {
@@ -708,7 +736,7 @@ input:focus {
   border: 2px solid rgba(var(--color-card), 0.92);
   border-radius: 18px;
   background: #ffffff;
-  box-shadow: 0 26px 64px rgba(15, 23, 42, 0.22);
+  box-shadow: 0 20px 44px rgba(15, 23, 42, 0.18);
   transform: rotateY(calc((360deg / var(--quantity)) * var(--index))) translateZ(var(--translateZ));
 }
 
@@ -770,9 +798,9 @@ input:focus {
   box-shadow: 0 14px 34px rgba(15, 23, 42, 0.08);
   cursor: pointer;
   transition:
-    transform 0.2s ease,
-    box-shadow 0.2s ease,
-    border-color 0.2s ease;
+    transform 0.34s ease,
+    box-shadow 0.34s ease,
+    border-color 0.34s ease;
 }
 
 .feature-code-card:hover {
@@ -1699,10 +1727,13 @@ input:focus {
 }
 
 .question-bank-home {
-  padding: 8px 0 32px;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 28px 0 56px;
 }
 
 .bank-title {
+  justify-content: center;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1721,6 +1752,7 @@ input:focus {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px;
   max-width: 760px;
+  margin: 0 auto;
 }
 
 .bank-card {
@@ -1788,15 +1820,29 @@ input:focus {
   padding: 0 13px;
   border: 0;
   border-radius: 999px;
-  color: #111827;
-  background: #ffffff;
+  color: #ffffff;
+  background-size: 280% auto;
+  background-image: linear-gradient(325deg, #2870c6 0%, #54d7ff 55%, #2870c6 90%);
+  box-shadow:
+    0 0 20px rgba(71, 184, 255, 0.5),
+    0 5px 5px -1px rgba(58, 125, 233, 0.25),
+    inset 4px 4px 8px rgba(175, 230, 255, 0.5),
+    inset -4px -4px 8px rgba(19, 95, 216, 0.35);
   font-size: 13px;
   font-weight: 800;
+  transition:
+    background-position 0.8s ease,
+    transform 0.28s ease;
+}
+
+.bank-card button:hover {
+  background-position: right top;
+  transform: translateY(-1px);
 }
 
 .topic-board {
   max-width: 860px;
-  margin: 0 0 46px;
+  margin: 0 auto 46px;
   padding: 28px;
   border: 1px solid #e6e9ef;
   border-radius: 16px;
@@ -1878,10 +1924,24 @@ input:focus {
   padding: 0 18px;
   border: 0;
   border-radius: 12px;
-  color: #6b7280;
-  background: #f4f5f7;
+  color: #ffffff;
+  background-size: 280% auto;
+  background-image: linear-gradient(325deg, #2870c6 0%, #47b8ff 55%, #2870c6 90%);
+  box-shadow:
+    0 0 20px rgba(71, 184, 255, 0.42),
+    0 5px 5px -1px rgba(58, 125, 233, 0.22),
+    inset 4px 4px 8px rgba(175, 230, 255, 0.45),
+    inset -4px -4px 8px rgba(19, 95, 216, 0.3);
   font-size: 13px;
   font-weight: 800;
+  transition:
+    background-position 0.8s ease,
+    transform 0.28s ease;
+}
+
+.practice-all-card button:hover {
+  background-position: right top;
+  transform: translateY(-1px);
 }
 
 .topic-table {
@@ -3243,6 +3303,7 @@ input:focus {
   overflow: visible;
   border-radius: 16px;
   perspective: 1100px;
+  transform: translateZ(0);
 }
 
 .vocab-card-flip {
@@ -3261,18 +3322,21 @@ input:focus {
   width: 100%;
   height: 100%;
   transform-style: preserve-3d;
-  transition: transform 360ms cubic-bezier(0.2, 0.78, 0.22, 1);
+  transform-origin: center center;
+  transition: transform 760ms cubic-bezier(0.2, 0.78, 0.22, 1);
   border-radius: 16px;
 }
 
-.vocab-card.flipped .vocab-card-inner,
-.vocab-card:hover .vocab-card-inner {
+.vocab-card.flipped .vocab-card-inner {
   transform: rotateY(180deg);
 }
 
 .vocab-card-face {
   position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3312,18 +3376,18 @@ input:focus {
   box-shadow: 0 14px 28px -24px rgba(15, 23, 42, 0.7);
   cursor: pointer;
   transition:
-    color 180ms ease,
-    border-color 180ms ease,
-    background 180ms ease,
-    transform 180ms ease,
-    box-shadow 180ms ease;
+    color 280ms ease,
+    border-color 280ms ease,
+    background 280ms ease,
+    transform 280ms ease,
+    box-shadow 280ms ease;
 }
 
 .vocab-favorite svg {
   fill: transparent;
   transition:
-    fill 180ms ease,
-    transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    fill 280ms ease,
+    transform 420ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .vocab-favorite:hover {
@@ -3337,7 +3401,7 @@ input:focus {
   border-color: #f59e0b;
   background: #fffbeb;
   box-shadow: 0 16px 34px -22px rgba(217, 119, 6, 0.75);
-  animation: favorite-pop 420ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: favorite-pop 680ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .vocab-favorite.active svg {
@@ -3358,7 +3422,7 @@ input:focus {
   border-radius: 999px;
   filter: blur(16px);
   opacity: 0.38;
-  animation: vocabFloating 2600ms infinite linear;
+  animation: vocabFloating 5200ms infinite linear;
 }
 
 .vocab-card-front::before {
@@ -3375,7 +3439,7 @@ input:focus {
   right: -12px;
   top: 28px;
   background: #54e2c0;
-  animation-delay: -1100ms;
+  animation-delay: -1800ms;
 }
 
 .vocab-card-front strong {
@@ -3411,7 +3475,7 @@ input:focus {
   left: calc(50% - 80px);
   top: -30%;
   background: linear-gradient(90deg, transparent, #ff9966, #ff9966, #ff9966, transparent);
-  animation: vocabBorderRotation 5000ms infinite linear;
+  animation: vocabBorderRotation 9000ms infinite linear;
 }
 
 .vocab-card-back::after {
@@ -4420,8 +4484,22 @@ input:focus {
 
 .sat-next-button {
   color: #ffffff;
-  border-color: var(--bubble);
-  background: var(--bubble);
+  border: 0;
+  background-size: 280% auto;
+  background-image: linear-gradient(325deg, #2870c6 0%, #47b8ff 55%, #2870c6 90%);
+  box-shadow:
+    0 0 20px rgba(71, 184, 255, 0.42),
+    0 5px 5px -1px rgba(58, 125, 233, 0.22),
+    inset 4px 4px 8px rgba(175, 230, 255, 0.45),
+    inset -4px -4px 8px rgba(19, 95, 216, 0.3);
+  transition:
+    background-position 0.8s ease,
+    transform 0.28s ease;
+}
+
+.sat-next-button:hover {
+  background-position: right top;
+  transform: translateY(-1px);
 }
 
 @media (max-width: 900px) {

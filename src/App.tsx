@@ -1002,9 +1002,9 @@ export default function App() {
               <div className="dashboard-copy">
                 <p className="eyebrow">4sat practice workspace</p>
                 <h1>
-                  Are you stuck at{" "}
-                  <ScoreTypewriter scores={["1230", "1280", "1350", "1410"]} />
-                  ?
+                  <span className="score-headline">
+                    Are you stuck at <ScoreTypewriter scores={["1230", "1280", "1350", "1410"]} />?
+                  </span>
                 </h1>
                 <p>
                   Break the plateau with focused question-bank modules, mistake review, vocabulary, battles, and progress that actually shows what to fix next.
@@ -1429,7 +1429,7 @@ function ScoreTypewriter({ scores }: { scores: string[] }) {
   useEffect(() => {
     const doneTyping = displayText === currentScore;
     const doneDeleting = displayText === "";
-    const delay = deleting ? 44 : doneTyping ? 1150 : 74;
+    const delay = deleting ? 72 : doneTyping ? 1650 : 112;
     const timeout = window.setTimeout(() => {
       if (deleting) {
         if (doneDeleting) {
@@ -1539,10 +1539,10 @@ function FeatureCardsShowcase() {
 
 function WarpBackground({ children, className = "" }: { children: ReactNode; className?: string }) {
   const beams = [
-    { x: 12, delay: "0s", duration: "4.8s", color: "#39b7ff" },
-    { x: 34, delay: "-1.6s", duration: "5.6s", color: "#a855f7" },
-    { x: 58, delay: "-2.7s", duration: "4.2s", color: "#22c55e" },
-    { x: 82, delay: "-3.4s", duration: "5.1s", color: "#fb7185" },
+    { x: 12, delay: "0s", duration: "8.8s", color: "#39b7ff" },
+    { x: 34, delay: "-2.6s", duration: "9.6s", color: "#a855f7" },
+    { x: 58, delay: "-3.7s", duration: "8.2s", color: "#22c55e" },
+    { x: 82, delay: "-4.4s", duration: "9.1s", color: "#fb7185" },
   ];
 
   return (
