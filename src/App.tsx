@@ -1003,7 +1003,10 @@ export default function App() {
                 <p className="eyebrow">4sat practice workspace</p>
                 <h1>
                   <span className="score-headline">
-                    Are you stuck at <ScoreTypewriter scores={["1230", "1280", "1350", "1410"]} />?
+                    Are you stuck at
+                    <span className="score-line">
+                      <ScoreTypewriter scores={["1230", "1280", "1350", "1410"]} />?
+                    </span>
                   </span>
                 </h1>
                 <p>
