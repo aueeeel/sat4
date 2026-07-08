@@ -62,8 +62,7 @@ a {
 
 .auth-shell,
 .app-shell {
-  width: calc(100% - 16px);
-  max-width: 1720px;
+  width: min(1480px, calc(100% - 32px));
   margin: 0 auto;
 }
 
@@ -96,8 +95,7 @@ a {
 }
 
 .auth-top-nav {
-  width: calc(100% - 24px);
-  max-width: 1720px;
+  width: min(1120px, calc(100% - 40px));
   margin: 0 auto;
   background: transparent;
   backdrop-filter: none;
@@ -674,86 +672,179 @@ input:focus {
   line-height: 1.65;
 }
 
-.results-fan {
+.results-carousel-wrapper {
   position: relative;
   z-index: 1;
-  min-height: 320px;
-  display: grid;
-  place-items: center;
-  perspective: 900px;
-}
-
-.result-card {
-  position: absolute;
-  width: min(260px, 28vw);
-  min-height: 330px;
+  min-height: 360px;
   display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  padding: 28px;
-  border: 2px solid currentColor;
-  border-radius: 30px;
-  color: #111827;
-  background: rgba(255, 255, 255, 0.88);
-  box-shadow: 0 26px 60px rgba(15, 23, 42, 0.12);
-  transform: translateX(var(--x)) rotate(var(--rot));
-  animation: resultCardFloat 5.8s ease-in-out infinite;
-  animation-delay: calc(var(--i) * -0.42s);
-  transition:
-    transform 260ms ease,
-    box-shadow 260ms ease;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  perspective: 1000px;
 }
 
-.result-card:hover {
-  transform: translateX(var(--x)) rotate(0deg) translateY(-18px) scale(1.04);
-  box-shadow: 0 34px 78px rgba(15, 23, 42, 0.18);
+.results-carousel-inner {
+  position: absolute;
+  --w: 150px;
+  --h: 208px;
+  --translateZ: 360px;
+  --rotateX: -15deg;
+  --perspective: 1000px;
+  width: var(--w);
+  height: var(--h);
+  top: calc(50% - (var(--h) / 2));
+  left: calc(50% - (var(--w) / 2));
+  z-index: 2;
+  transform-style: preserve-3d;
+  transform: perspective(var(--perspective));
+  animation: resultRotating 20s linear infinite;
 }
 
-.result-card.mint {
-  color: #18b994;
-}
-
-.result-card.blue {
-  color: #2870c6;
-}
-
-.result-card.pink {
-  color: #e94196;
-}
-
-.result-card.purple {
-  color: #6041b7;
-}
-
-.result-card span {
-  color: #6b7280;
-  font-size: 15px;
-  font-weight: 900;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-}
-
-.result-card strong {
-  color: #0b1120;
-  font-size: 42px;
-  line-height: 1;
-  letter-spacing: -0.06em;
-}
-
-.result-card em {
-  width: fit-content;
-  padding: 9px 13px;
-  border-radius: 999px;
-  color: currentColor;
+.result-photo-card {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  overflow: hidden;
+  border: 2px solid rgba(var(--color-card), 0.92);
+  border-radius: 18px;
   background: #ffffff;
-  font-style: normal;
-  font-weight: 900;
+  box-shadow: 0 26px 64px rgba(15, 23, 42, 0.22);
+  transform: rotateY(calc((360deg / var(--quantity)) * var(--index))) translateZ(var(--translateZ));
 }
 
-@keyframes resultCardFloat {
-  50% {
-    translate: 0 -8px;
+.result-photo-card img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  background:
+    radial-gradient(circle, rgba(var(--color-card), 0.18) 0%, rgba(var(--color-card), 0.42) 80%, rgba(var(--color-card), 0.75) 100%),
+    #ffffff;
+}
+
+@keyframes resultRotating {
+  from {
+    transform: perspective(var(--perspective)) rotateX(var(--rotateX)) rotateY(0);
   }
+
+  to {
+    transform: perspective(var(--perspective)) rotateX(var(--rotateX)) rotateY(1turn);
+  }
+}
+
+.feature-showcase {
+  margin: 0 0 38px;
+  padding: clamp(30px, 5vw, 58px);
+  border: 1px solid #e5e9f1;
+  border-radius: 28px;
+  background: #ffffff;
+  box-shadow: 0 20px 58px rgba(15, 23, 42, 0.08);
+}
+
+.feature-showcase-head {
+  max-width: 720px;
+  margin-bottom: 24px;
+}
+
+.feature-showcase-head h2 {
+  margin: 8px 0 0;
+  color: #080d1a;
+  font-size: clamp(36px, 4vw, 62px);
+  line-height: 0.98;
+  letter-spacing: -0.07em;
+}
+
+.feature-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.feature-code-card {
+  position: relative;
+  min-height: 292px;
+  padding: 20px;
+  border: 1px solid #dfe5ee;
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.08);
+  cursor: pointer;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.feature-code-card:hover {
+  transform: translateY(-5px);
+  border-color: #cbd5e1;
+  box-shadow: 0 22px 48px rgba(15, 23, 42, 0.12);
+}
+
+.mac-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 15px;
+}
+
+.mac-header span {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.mac-header .red {
+  background: #ff5f57;
+}
+
+.mac-header .yellow {
+  background: #ffbd2e;
+}
+
+.mac-header .green {
+  background: #28c941;
+}
+
+.feature-code-card .card-tag {
+  display: inline-block;
+  margin-bottom: 12px;
+  padding: 5px 7px;
+  border-radius: 7px;
+  color: #6041b7;
+  background: #f1edff;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.feature-code-card h3 {
+  margin: 0 0 12px;
+  color: #101828;
+  font-size: 20px;
+  letter-spacing: -0.04em;
+}
+
+.code-editor {
+  height: 150px;
+  overflow: auto;
+  padding: 15px;
+  border: 1px solid #d9e0ea;
+  border-radius: 10px;
+  color: #344054;
+  background: #f8fafc;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.code-editor pre {
+  margin: 0;
+}
+
+.code-editor code {
+  display: block;
+  white-space: pre-wrap;
+  font-family: Montserrat, system-ui, sans-serif;
 }
 
 .auth-warp-background {
@@ -1507,11 +1598,11 @@ input:focus {
 @media (max-width: 760px) {
   .auth-shell,
   .app-shell {
-    width: calc(100% - 10px);
+    width: min(100% - 24px, 1120px);
   }
 
   .auth-top-nav {
-    width: calc(100% - 10px);
+    width: min(100% - 24px, 1120px);
   }
 
   .top-nav {
@@ -3142,14 +3233,15 @@ input:focus {
 
 .vocab-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px;
 }
 
 .vocab-card {
   position: relative;
-  height: 144px;
-  border-radius: 18px;
+  height: 254px;
+  overflow: visible;
+  border-radius: 16px;
   perspective: 1100px;
 }
 
@@ -3158,7 +3250,7 @@ input:focus {
   height: 100%;
   padding: 0;
   border: 0;
-  border-radius: 18px;
+  border-radius: 16px;
   background: transparent;
   cursor: pointer;
 }
@@ -3169,10 +3261,12 @@ input:focus {
   width: 100%;
   height: 100%;
   transform-style: preserve-3d;
-  transition: transform 560ms cubic-bezier(0.2, 0.78, 0.22, 1);
+  transition: transform 360ms cubic-bezier(0.2, 0.78, 0.22, 1);
+  border-radius: 16px;
 }
 
-.vocab-card.flipped .vocab-card-inner {
+.vocab-card.flipped .vocab-card-inner,
+.vocab-card:hover .vocab-card-inner {
   transform: rotateY(180deg);
 }
 
@@ -3184,11 +3278,12 @@ input:focus {
   justify-content: center;
   padding: 18px;
   border: 1px solid #e2e8f0;
-  border-radius: 18px;
+  border-radius: 16px;
   background: #ffffff;
-  box-shadow: 0 18px 42px -34px rgba(15, 23, 42, 0.46);
+  box-shadow: 0 16px 36px -28px rgba(15, 23, 42, 0.5);
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
+  color: #1f2937;
   transition:
     border-color 180ms ease,
     box-shadow 180ms ease,
@@ -3196,8 +3291,8 @@ input:focus {
 }
 
 .vocab-card:hover .vocab-card-face {
-  border-color: #cbd5e1;
-  box-shadow: 0 22px 54px -34px rgba(15, 23, 42, 0.56);
+  border-color: #d6dce7;
+  box-shadow: 0 22px 52px -32px rgba(15, 23, 42, 0.58);
 }
 
 .vocab-favorite {
@@ -3252,22 +3347,52 @@ input:focus {
 
 .vocab-card-front {
   overflow: hidden;
-  color: var(--ink);
+  color: #1f2937;
   text-align: center;
 }
 
+.vocab-card-front::before,
+.vocab-card-front::after {
+  content: "";
+  position: absolute;
+  border-radius: 999px;
+  filter: blur(16px);
+  opacity: 0.38;
+  animation: vocabFloating 2600ms infinite linear;
+}
+
+.vocab-card-front::before {
+  width: 115px;
+  height: 115px;
+  left: -18px;
+  bottom: 18px;
+  background: #ffbb66;
+}
+
+.vocab-card-front::after {
+  width: 74px;
+  height: 74px;
+  right: -12px;
+  top: 28px;
+  background: #54e2c0;
+  animation-delay: -1100ms;
+}
+
 .vocab-card-front strong {
-  font-size: clamp(18px, 1.8vw, 27px);
-  font-weight: 950;
+  position: relative;
+  z-index: 1;
+  font-size: clamp(20px, 2vw, 31px);
+  font-weight: 500;
   line-height: 1.08;
-  letter-spacing: -0.07em;
+  letter-spacing: -0.04em;
 }
 
 .vocab-card-back {
+  position: relative;
   align-items: flex-start;
   flex-direction: column;
   justify-content: flex-start;
-  gap: 8px;
+  gap: 10px;
   overflow-y: auto;
   overscroll-behavior: contain;
   color: #334155;
@@ -3275,6 +3400,31 @@ input:focus {
   transform: rotateY(180deg);
   scrollbar-width: thin;
   scrollbar-color: #cbd5e1 transparent;
+}
+
+.vocab-card-back::before {
+  content: "";
+  position: absolute;
+  display: block;
+  width: 160px;
+  height: 160%;
+  left: calc(50% - 80px);
+  top: -30%;
+  background: linear-gradient(90deg, transparent, #ff9966, #ff9966, #ff9966, transparent);
+  animation: vocabBorderRotation 5000ms infinite linear;
+}
+
+.vocab-card-back::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: 13px;
+  background: #ffffff;
+}
+
+.vocab-card-back > * {
+  position: relative;
+  z-index: 1;
 }
 
 .vocab-card-back::-webkit-scrollbar {
@@ -3291,25 +3441,37 @@ input:focus {
 }
 
 .vocab-card-back strong {
-  color: var(--ink);
-  font-size: 18px;
-  font-weight: 950;
-  letter-spacing: -0.05em;
+  color: #111827;
+  font-size: 20px;
+  font-weight: 500;
+  letter-spacing: -0.03em;
 }
 
 .vocab-card-back span {
   color: #475569;
-  font-size: 12px;
-  font-weight: 800;
+  font-size: 13px;
+  font-weight: 400;
   line-height: 1.45;
 }
 
 .vocab-card-back em {
   color: #64748b;
-  font-size: 11px;
+  font-size: 12px;
   font-style: normal;
-  font-weight: 650;
+  font-weight: 400;
   line-height: 1.4;
+}
+
+@keyframes vocabBorderRotation {
+  to {
+    transform: rotateZ(360deg);
+  }
+}
+
+@keyframes vocabFloating {
+  50% {
+    transform: translateY(10px);
+  }
 }
 
 .vocab-pagination,
@@ -4266,6 +4428,8 @@ input:focus {
   .bank-cards,
   .arena-entry-grid,
   .arena-layout,
+  .student-results-showcase,
+  .feature-card-grid,
   .study-layout,
   .friends-layout,
   .friends-chat-layout,
@@ -4299,6 +4463,16 @@ input:focus {
 
   .study-video-head p {
     text-align: left;
+  }
+
+  .results-carousel-wrapper {
+    min-height: 310px;
+  }
+
+  .results-carousel-inner {
+    --w: 126px;
+    --h: 176px;
+    --translateZ: 290px;
   }
 
   .sat-reading-pane {

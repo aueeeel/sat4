@@ -186,7 +186,7 @@ export default function App() {
   const [authDialogOpen, setAuthDialogOpen] = useState(false);
   const [answersVersion, setAnswersVersion] = useState(0);
   const [activeSection, setActiveSection] = useState<Section>("Verbal");
-  const [bankView, setBankView] = useState<"home" | "topics" | "vocabulary" | "arena" | "study" | "friends">(() => {
+  const [bankView, setBankView] = useState<"home" | "bank" | "topics" | "vocabulary" | "arena" | "study" | "friends">(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get("arena") ? "arena" : "home";
   });
@@ -910,11 +910,11 @@ export default function App() {
               id: "bank",
               label: "Question Bank",
               icon: <LibraryBig size={17} />,
-              active: bankView === "topics",
+              active: bankView === "bank" || bankView === "topics",
               badge: String(sectionStats.find((stat) => stat.section === activeSection)?.answered ?? 0),
               onClick: () => {
-                setBankView("home");
-                window.setTimeout(() => document.getElementById("bank")?.scrollIntoView({ behavior: "smooth" }), 0);
+                setBankView("bank");
+                window.scrollTo({ top: 0, behavior: "smooth" });
               },
             },
             {
@@ -1020,6 +1020,9 @@ export default function App() {
 
           <StudentResultsShowcase />
 
+          <FeatureCardsShowcase />
+        </>
+      ) : bankView === "bank" ? (
           <section id="bank" className="question-bank-home">
             <div className="bank-title">
               <LibraryBig size={24} />
@@ -1046,13 +1049,12 @@ export default function App() {
               ))}
             </div>
           </section>
-        </>
       ) : (
         <section id="topics" className="topic-page">
           <button
             className="topic-back"
             onClick={() => {
-              setBankView("home");
+              setBankView("bank");
               window.scrollTo({ top: 0, behavior: "smooth" });
             }}
           >
@@ -1456,13 +1458,7 @@ function ScoreTypewriter({ scores }: { scores: string[] }) {
 }
 
 function StudentResultsShowcase() {
-  const cards = [
-    { name: "Aigerim", before: "1210", after: "1490", note: "+280 in 9 weeks", tone: "mint" },
-    { name: "Daniyal", before: "1320", after: "1530", note: "Math 790", tone: "blue" },
-    { name: "Maya", before: "1180", after: "1450", note: "Verbal +170", tone: "pink" },
-    { name: "Timur", before: "1360", after: "1510", note: "Top 1% score", tone: "purple" },
-    { name: "Sara", before: "1270", after: "1480", note: "7 mock tests", tone: "mint" },
-  ];
+  const cards = Array.from({ length: 8 }, (_, index) => index);
 
   return (
     <section className="student-results-showcase" aria-label="Student SAT results">
@@ -1471,22 +1467,69 @@ function StudentResultsShowcase() {
         <h2>Real progress looks loud.</h2>
         <p>Replace random practice with targeted modules, review loops, and SAT-style pressure that keeps students moving.</p>
       </div>
-      <div className="results-fan" aria-label="SAT score improvement cards">
-        {cards.map((card, index) => (
-          <article
-            key={card.name}
-            className={`result-card ${card.tone}`}
-            style={
-              {
-                "--i": index,
-                "--x": `${(index - 2) * 84}px`,
-                "--rot": `${(index - 2) * 7}deg`,
-              } as CSSProperties
-            }
-          >
-            <span>{card.name}</span>
-            <strong>{card.before} → {card.after}</strong>
-            <em>{card.note}</em>
+      <div className="results-carousel-wrapper" aria-label="Rotating SAT score result cards">
+        <div className="results-carousel-inner">
+          {cards.map((cardIndex) => (
+            <figure
+              key={cardIndex}
+              className="result-photo-card"
+              style={
+                {
+                  "--index": cardIndex,
+                  "--quantity": cards.length,
+                  "--color-card": cardIndex % 2 === 0 ? "84, 226, 192" : "233, 65, 150",
+                } as CSSProperties
+              }
+            >
+              <img src="/results/student-result.png" alt="SAT student result" />
+            </figure>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function FeatureCardsShowcase() {
+  const cards = [
+    {
+      tag: "practice.engine",
+      title: "Targeted SAT modules",
+      lines: ["Question Bank split by SAT domains", "Math + Reading & Writing modules", "Difficulty colors for smarter practice"],
+    },
+    {
+      tag: "review.loop",
+      title: "Mistakes become a plan",
+      lines: ["Check answers when you are ready", "Review wrong attempts and explanations", "Track progress by topic"],
+    },
+    {
+      tag: "social.mode",
+      title: "Built for students together",
+      lines: ["1v1 rooms with live scoring", "Friends, messages, shared tasks", "Study rooms with camera-only focus"],
+    },
+  ];
+
+  return (
+    <section className="feature-showcase" aria-label="4sat advantages">
+      <div className="feature-showcase-head">
+        <p className="eyebrow">why 4sat</p>
+        <h2>Everything students need after the lesson.</h2>
+      </div>
+      <div className="feature-card-grid">
+        {cards.map((card) => (
+          <article key={card.tag} className="feature-code-card">
+            <div className="mac-header" aria-hidden="true">
+              <span className="red" />
+              <span className="yellow" />
+              <span className="green" />
+            </div>
+            <span className="card-tag">{card.tag}</span>
+            <h3>{card.title}</h3>
+            <div className="code-editor">
+              <pre>
+                <code>{card.lines.map((line) => `✓ ${line}`).join("\n")}</code>
+              </pre>
+            </div>
           </article>
         ))}
       </div>
