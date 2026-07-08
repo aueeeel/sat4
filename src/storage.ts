@@ -3,6 +3,18 @@ import type { Question, Section } from "./types";
 
 const SESSION_USER_KEY = "4sat.session.user";
 const ANSWERS_KEY = "4sat.answers";
+const DEFAULT_REMOTE_API_BASE = "https://sat4-app.onrender.com";
+
+const getApiBaseUrl = () => {
+  const configuredUrl = import.meta.env.VITE_API_BASE_URL;
+  if (configuredUrl) return configuredUrl.replace(/\/$/, "");
+
+  const hostname = window.location.hostname;
+  const isLocal = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "";
+  return isLocal ? "" : DEFAULT_REMOTE_API_BASE;
+};
+
+const apiUrl = (path: string) => `${getApiBaseUrl()}${path}`;
 
 type RegisterPayload = {
   fullName: string;
@@ -31,13 +43,14 @@ const writeJson = <T,>(key: string, value: T) => {
 };
 
 const requestJson = async <T,>(path: string, payload: unknown): Promise<T> => {
-  const response = await fetch(path, {
+  const response = await fetch(apiUrl(path), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
 
-  const data = (await response.json()) as { error?: string } & T;
+  const text = await response.text();
+  const data = text ? (JSON.parse(text) as { error?: string } & T) : ({} as { error?: string } & T);
 
   if (!response.ok) {
     throw new Error(data.error || "Something went wrong.");
@@ -47,8 +60,9 @@ const requestJson = async <T,>(path: string, payload: unknown): Promise<T> => {
 };
 
 const getJson = async <T,>(path: string): Promise<T> => {
-  const response = await fetch(path);
-  const data = (await response.json()) as { error?: string } & T;
+  const response = await fetch(apiUrl(path));
+  const text = await response.text();
+  const data = text ? (JSON.parse(text) as { error?: string } & T) : ({} as { error?: string } & T);
   if (!response.ok) throw new Error(data.error || "Something went wrong.");
   return data;
 };

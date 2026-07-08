@@ -199,6 +199,7 @@ export default function App() {
   const [freeResponseValue, setFreeResponseValue] = useState("");
   const [eliminatedChoices, setEliminatedChoices] = useState<Record<string, number[]>>({});
   const [wrongPracticeChoices, setWrongPracticeChoices] = useState<Record<string, number[]>>({});
+  const [reviewQuestionIds, setReviewQuestionIds] = useState<string[]>([]);
   const [shareQuestion, setShareQuestion] = useState<Question | null>(null);
   const [activeStudyRoomId, setActiveStudyRoomId] = useState("");
   const [studyDockMinimized, setStudyDockMinimized] = useState(false);
@@ -208,6 +209,7 @@ export default function App() {
   const [calculatorDragging, setCalculatorDragging] = useState(false);
   const [calculatorFrame, setCalculatorFrame] = useState({ x: 920, y: 92, width: 430, height: 540 });
   const [practiceStartedAt, setPracticeStartedAt] = useState(Date.now());
+  const [practiceTimerHidden, setPracticeTimerHidden] = useState(false);
   const [currentTime, setCurrentTime] = useState(Date.now());
 
   const answers = useMemo(() => (currentUser ? getAnswers(currentUser.id) : []), [currentUser, answersVersion]);
@@ -440,6 +442,12 @@ export default function App() {
     });
   };
 
+  const toggleReviewQuestion = (questionId: string) => {
+    setReviewQuestionIds((current) =>
+      current.includes(questionId) ? current.filter((id) => id !== questionId) : [...current, questionId]
+    );
+  };
+
   const submitFreeResponse = (question: Question) => {
     if (!currentUser) return;
     const acceptedAnswers = parseAcceptedAnswers(question);
@@ -646,10 +654,11 @@ export default function App() {
             <ChevronLeft size={16} />
             Go back
           </button>
-          <button className="sat-directions">Directions</button>
           <div className="sat-timer" aria-label="Practice timer">
-            <strong>{practiceTimer}</strong>
-            <button>Hide</button>
+            {!practiceTimerHidden && <strong>{practiceTimer}</strong>}
+            <button onClick={() => setPracticeTimerHidden((hidden) => !hidden)}>
+              {practiceTimerHidden ? "Show" : "Hide"}
+            </button>
           </div>
           <div className="sat-tools">
             <button>
@@ -726,7 +735,10 @@ export default function App() {
             <div className="sat-question-card">
               <div className="sat-question-top">
                 <span className="sat-number">{activeQuestionIndex + 1}</span>
-                <button className="sat-review">
+                <button
+                  className={reviewQuestionIds.includes(activeQuestion.id) ? "sat-review active" : "sat-review"}
+                  onClick={() => toggleReviewQuestion(activeQuestion.id)}
+                >
                   <Bookmark size={15} />
                   Mark for Review
                 </button>
@@ -810,9 +822,12 @@ export default function App() {
 
         <footer className="sat-footer">
           <div className="sat-footer-left">
-            <QuestionPagination
+            <QuestionBankNavigator
               currentIndex={activeQuestionIndex}
-              total={filteredQuestions.length}
+              questions={filteredQuestions}
+              answerMap={answerMap}
+              wrongChoices={wrongPracticeChoices}
+              reviewQuestionIds={reviewQuestionIds}
               onGoTo={goToQuestionIndex}
             />
           </div>
@@ -986,9 +1001,13 @@ export default function App() {
             <section id="dashboard" className="dashboard">
               <div className="dashboard-copy">
                 <p className="eyebrow">4sat practice workspace</p>
-                <h1>{currentUser.name}, prepare smarter for the Digital SAT.</h1>
+                <h1>
+                  Are you stuck at{" "}
+                  <ScoreTypewriter scores={["1230", "1280", "1350", "1410"]} />
+                  ?
+                </h1>
                 <p>
-                  Choose Reading & Writing or Math, practice focused question-bank modules, and track progress automatically.
+                  Break the plateau with focused question-bank modules, mistake review, vocabulary, battles, and progress that actually shows what to fix next.
                 </p>
               </div>
               <div className="stats-strip" aria-label="Overall progress">
@@ -998,6 +1017,8 @@ export default function App() {
               </div>
             </section>
           </WarpBackground>
+
+          <StudentResultsShowcase />
 
           <section id="bank" className="question-bank-home">
             <div className="bank-title">
@@ -1397,6 +1418,82 @@ function Metric({ icon, label, value }: { icon: ReactNode; label: string; value:
   );
 }
 
+function ScoreTypewriter({ scores }: { scores: string[] }) {
+  const [scoreIndex, setScoreIndex] = useState(0);
+  const [displayText, setDisplayText] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const currentScore = scores[scoreIndex] ?? "";
+
+  useEffect(() => {
+    const doneTyping = displayText === currentScore;
+    const doneDeleting = displayText === "";
+    const delay = deleting ? 44 : doneTyping ? 1150 : 74;
+    const timeout = window.setTimeout(() => {
+      if (deleting) {
+        if (doneDeleting) {
+          setDeleting(false);
+          setScoreIndex((index) => (index + 1) % scores.length);
+        } else {
+          setDisplayText((text) => text.slice(0, -1));
+        }
+        return;
+      }
+      if (doneTyping) {
+        setDeleting(true);
+      } else {
+        setDisplayText(currentScore.slice(0, displayText.length + 1));
+      }
+    }, delay);
+    return () => window.clearTimeout(timeout);
+  }, [currentScore, deleting, displayText, scores.length]);
+
+  return (
+    <span className="score-typewriter">
+      {displayText}
+      <i aria-hidden="true">_</i>
+    </span>
+  );
+}
+
+function StudentResultsShowcase() {
+  const cards = [
+    { name: "Aigerim", before: "1210", after: "1490", note: "+280 in 9 weeks", tone: "mint" },
+    { name: "Daniyal", before: "1320", after: "1530", note: "Math 790", tone: "blue" },
+    { name: "Maya", before: "1180", after: "1450", note: "Verbal +170", tone: "pink" },
+    { name: "Timur", before: "1360", after: "1510", note: "Top 1% score", tone: "purple" },
+    { name: "Sara", before: "1270", after: "1480", note: "7 mock tests", tone: "mint" },
+  ];
+
+  return (
+    <section className="student-results-showcase" aria-label="Student SAT results">
+      <div className="results-copy">
+        <p className="eyebrow">student results</p>
+        <h2>Real progress looks loud.</h2>
+        <p>Replace random practice with targeted modules, review loops, and SAT-style pressure that keeps students moving.</p>
+      </div>
+      <div className="results-fan" aria-label="SAT score improvement cards">
+        {cards.map((card, index) => (
+          <article
+            key={card.name}
+            className={`result-card ${card.tone}`}
+            style={
+              {
+                "--i": index,
+                "--x": `${(index - 2) * 84}px`,
+                "--rot": `${(index - 2) * 7}deg`,
+              } as CSSProperties
+            }
+          >
+            <span>{card.name}</span>
+            <strong>{card.before} → {card.after}</strong>
+            <em>{card.note}</em>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function WarpBackground({ children, className = "" }: { children: ReactNode; className?: string }) {
   const beams = [
     { x: 12, delay: "0s", duration: "4.8s", color: "#39b7ff" },
@@ -1432,63 +1529,88 @@ function WarpBackground({ children, className = "" }: { children: ReactNode; cla
   );
 }
 
-function QuestionPagination({
+function QuestionBankNavigator({
   currentIndex,
-  total,
+  questions,
+  answerMap,
+  wrongChoices,
+  reviewQuestionIds,
   onGoTo,
 }: {
   currentIndex: number;
-  total: number;
+  questions: Question[];
+  answerMap: Map<string, AnswerRecord>;
+  wrongChoices: Record<string, number[]>;
+  reviewQuestionIds: string[];
   onGoTo: (index: number) => void;
 }) {
+  const [open, setOpen] = useState(false);
   const currentPage = currentIndex + 1;
-  const pages = Array.from(
-    new Set([1, currentPage - 1, currentPage, currentPage + 1, total].filter((page) => page >= 1 && page <= total))
-  );
+  const total = questions.length;
 
   return (
-    <nav className="question-pagination" aria-label="Question pagination">
-      <button className="question-page-nav" disabled={currentPage <= 1} onClick={() => onGoTo(currentIndex - 1)}>
-        <ChevronLeft size={16} />
-        Previous
+    <div className="question-bank-navigator">
+      <button className="sat-count" onClick={() => setOpen((value) => !value)} aria-expanded={open}>
+        {currentPage} of {total}
       </button>
-      <div className="question-page-links">
-        {pages.map((page, index) => (
-          <FragmentedPageButton
-            key={page}
-            page={page}
-            previousPage={pages[index - 1]}
-            active={page === currentPage}
-            onClick={() => onGoTo(page - 1)}
-          />
-        ))}
-      </div>
-      <button className="question-page-nav" disabled={currentPage >= total} onClick={() => onGoTo(currentIndex + 1)}>
-        Next
-        <ChevronRight size={16} />
-      </button>
-    </nav>
-  );
-}
-
-function FragmentedPageButton({
-  page,
-  previousPage,
-  active,
-  onClick,
-}: {
-  page: number;
-  previousPage?: number;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <>
-      {previousPage && page - previousPage > 1 && <span className="question-page-ellipsis">...</span>}
-      <button className={active ? "question-page-link active" : "question-page-link"} onClick={onClick}>
-        {page}
-      </button>
-    </>
+      {open && (
+        <section className="question-bank-popover" aria-label="Question Bank navigation">
+          <header className="question-bank-popover-header">
+            <strong>Question Bank</strong>
+            <div>
+              <button className="question-bank-mini-button">
+                <SlidersHorizontal size={13} />
+                Group Answered
+              </button>
+              <button className="question-bank-close" onClick={() => setOpen(false)} aria-label="Close question bank menu">
+                <X size={16} />
+              </button>
+            </div>
+          </header>
+          <div className="question-bank-legend">
+            <span><i className="legend-dot correct"><Check size={11} /></i> Correct</span>
+            <span><i className="legend-dot incorrect"><X size={11} /></i> Incorrect</span>
+            <span><i className="legend-flag" /> For Review</span>
+            <span><i className="legend-dot retry" /> Correct (incorrect attempts)</span>
+          </div>
+          <div className="question-bank-difficulty-legend">
+            <span><i className="difficulty-swatch easy" /> Easy</span>
+            <span><i className="difficulty-swatch medium" /> Medium</span>
+            <span><i className="difficulty-swatch hard" /> Hard</span>
+          </div>
+          <div className="question-bank-grid">
+            {questions.map((question, index) => {
+              const answer = answerMap.get(question.id);
+              const wrongAttempts = wrongChoices[question.id]?.length ?? 0;
+              const correctAfterWrong = Boolean(answer?.correct && wrongAttempts > 0);
+              const active = index === currentIndex;
+              const statusClass = answer?.correct ? (correctAfterWrong ? "retry" : "correct") : answer ? "incorrect" : "";
+              return (
+                <button
+                  key={question.id}
+                  className={[
+                    "question-bank-cell",
+                    question.difficulty.toLowerCase(),
+                    statusClass,
+                    active ? "active" : "",
+                  ].join(" ")}
+                  onClick={() => {
+                    onGoTo(index);
+                    setOpen(false);
+                  }}
+                  title={`${index + 1}. ${question.difficulty}${answer ? answer.correct ? " · Correct" : " · Incorrect" : ""}`}
+                >
+                  {index + 1}
+                  {reviewQuestionIds.includes(question.id) && <Bookmark className="question-bank-review-mark" size={11} />}
+                  {answer?.correct && <Check className="question-bank-status-mark" size={11} />}
+                  {answer && !answer.correct && <X className="question-bank-status-mark" size={11} />}
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      )}
+    </div>
   );
 }
 
