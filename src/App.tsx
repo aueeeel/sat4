@@ -882,7 +882,7 @@ export default function App() {
   }
 
   return (
-    <main className="app-shell">
+    <main className={bankView === "home" ? "app-shell home-shell" : "app-shell"}>
       <nav className="top-nav app-nav">
         <button
           className="brand nav-brand"
