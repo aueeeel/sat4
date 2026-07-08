@@ -62,7 +62,8 @@ a {
 
 .auth-shell,
 .app-shell {
-  width: min(1480px, calc(100% - 32px));
+  width: calc(100% - 16px);
+  max-width: 1720px;
   margin: 0 auto;
 }
 
@@ -95,7 +96,8 @@ a {
 }
 
 .auth-top-nav {
-  width: min(1120px, calc(100% - 40px));
+  width: calc(100% - 24px);
+  max-width: 1720px;
   margin: 0 auto;
   background: transparent;
   backdrop-filter: none;
@@ -421,6 +423,7 @@ input:focus {
 }
 
 .app-nav {
+  width: 100%;
   margin-bottom: 26px;
 }
 
@@ -1504,7 +1507,11 @@ input:focus {
 @media (max-width: 760px) {
   .auth-shell,
   .app-shell {
-    width: min(100% - 24px, 1120px);
+    width: calc(100% - 10px);
+  }
+
+  .auth-top-nav {
+    width: calc(100% - 10px);
   }
 
   .top-nav {

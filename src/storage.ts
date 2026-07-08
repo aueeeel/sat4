@@ -16,6 +16,21 @@ const getApiBaseUrl = () => {
 
 const apiUrl = (path: string) => `${getApiBaseUrl()}${path}`;
 
+const parseJsonResponse = async <T,>(response: Response): Promise<{ error?: string } & T> => {
+  const text = await response.text();
+  const trimmedText = text.trim();
+
+  if (!trimmedText) {
+    return {} as { error?: string } & T;
+  }
+
+  try {
+    return JSON.parse(trimmedText) as { error?: string } & T;
+  } catch {
+    throw new Error("Server returned an invalid response. Please try again in a moment.");
+  }
+};
+
 type RegisterPayload = {
   fullName: string;
   nickname: string;
@@ -49,8 +64,7 @@ const requestJson = async <T,>(path: string, payload: unknown): Promise<T> => {
     body: JSON.stringify(payload),
   });
 
-  const text = await response.text();
-  const data = text ? (JSON.parse(text) as { error?: string } & T) : ({} as { error?: string } & T);
+  const data = await parseJsonResponse<T>(response);
 
   if (!response.ok) {
     throw new Error(data.error || "Something went wrong.");
@@ -61,8 +75,7 @@ const requestJson = async <T,>(path: string, payload: unknown): Promise<T> => {
 
 const getJson = async <T,>(path: string): Promise<T> => {
   const response = await fetch(apiUrl(path));
-  const text = await response.text();
-  const data = text ? (JSON.parse(text) as { error?: string } & T) : ({} as { error?: string } & T);
+  const data = await parseJsonResponse<T>(response);
   if (!response.ok) throw new Error(data.error || "Something went wrong.");
   return data;
 };
