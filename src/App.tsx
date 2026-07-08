@@ -997,29 +997,41 @@ export default function App() {
         <VocabularyView />
       ) : bankView === "home" ? (
         <>
-          <WarpBackground>
-            <section id="dashboard" className="dashboard">
-              <div className="dashboard-copy">
-                <p className="eyebrow">4sat practice workspace</p>
-                <h1>
-                  <span className="score-headline">
-                    Are you stuck at
-                    <span className="score-line">
-                      <ScoreTypewriter scores={["1230", "1280", "1350", "1410"]} />?
-                    </span>
+          <section id="dashboard" className="video-hero">
+            <video className="video-hero-media" src="/hero/road-background.mp4" autoPlay muted loop playsInline />
+            <div className="video-hero-overlay" />
+            <div className="video-hero-content">
+              <p className="eyebrow">4sat practice workspace</p>
+              <h1>
+                <span className="score-headline">
+                  Are you stuck at
+                  <span className="score-line">
+                    <ScoreTypewriter scores={["1230", "1280", "1350", "1410"]} />?
                   </span>
-                </h1>
-                <p>
-                  Break the plateau with focused question-bank modules, mistake review, vocabulary, battles, and progress that actually shows what to fix next.
-                </p>
+                </span>
+              </h1>
+              <p>
+                Practice smarter with focused SAT modules, vocabulary cards, battles, and progress that shows exactly what to fix next.
+              </p>
+              <div className="video-hero-actions">
+                <button className="primary-button" onClick={() => setBankView("bank")}>
+                  Start practicing
+                  <ChevronRight size={17} />
+                </button>
+                <button className="hero-ghost-button" onClick={() => setBankView("vocabulary")}>
+                  Open vocabulary
+                </button>
               </div>
-              <div className="stats-strip" aria-label="Overall progress">
-                <Metric icon={<ClipboardCheck size={20} />} label="Answered" value={`${totalAnswered}/${questions.length}`} />
-                <Metric icon={<Gauge size={20} />} label="Accuracy" value={`${totalAccuracy}%`} />
-                <Metric icon={<Trophy size={20} />} label="Correct" value={String(totalCorrect)} />
-              </div>
-            </section>
-          </WarpBackground>
+            </div>
+          </section>
+
+          <section className="landing-stats" aria-label="Overall progress">
+            <div className="stats-strip">
+              <Metric icon={<ClipboardCheck size={20} />} label="Answered" value={`${totalAnswered}/${questions.length}`} />
+              <Metric icon={<Gauge size={20} />} label="Accuracy" value={`${totalAccuracy}%`} />
+              <Metric icon={<Trophy size={20} />} label="Correct" value={String(totalCorrect)} />
+            </div>
+          </section>
 
           <StudentResultsShowcase />
 
