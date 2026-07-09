@@ -560,28 +560,66 @@ export default function App() {
     if (authPageOpen) {
       return (
         <main className="auth-page-shell">
-          <section className="auth-page-media" aria-label="sat4.me video preview">
-            <video src="/hero/road-background.mp4" autoPlay muted loop playsInline />
+          <section className="auth-page-media auth-page-flower-media" aria-label="sat4.me score goal preview">
             <div className="auth-page-media-overlay" />
             <nav className="auth-page-brand">
               <img className="brand-logo" src="/brand/4sat-logo.png" alt="sat4.me logo" />
               <span>sat4.me</span>
             </nav>
-            <div className="auth-score-preview">
-              <span className="award-pill auth-page-pill">готовимся вместе</span>
-              <div className="auth-preview-card">
-                <div>
-                  <small>Estimated SAT</small>
-                  <strong>1520</strong>
-                </div>
-                <span>target<br />1550+</span>
-                <p>Adaptive practice, focused review loops, and live battle motivation.</p>
-                <div className="auth-preview-bars">
-                  <i style={{ width: "92%" }} />
-                  <i style={{ width: "84%" }} />
-                  <i style={{ width: "76%" }} />
-                </div>
+            <div className="auth-score-preview auth-goal-preview">
+              <div className="auth-goal-orbit" aria-hidden="true">
+                <span />
+                <span />
+                <span />
               </div>
+              <section className="auth-goal-card" aria-label="Predicted SAT score and goal">
+                <div className="auth-goal-lightning" aria-hidden="true"><i /><span /></div>
+                <div className="auth-goal-top">
+                  <div className="auth-goal-mark">
+                    <BookOpenCheck size={18} />
+                  </div>
+                  <div>
+                    <small>sat4.me</small>
+                    <strong>SAT · Digital Suite</strong>
+                  </div>
+                  <span className="auth-goal-live"><i /> Live practice</span>
+                </div>
+                <div className="auth-goal-score">
+                  <p>Your projected score</p>
+                  <div>
+                    <strong>1520</strong>
+                    <span>/1600</span>
+                    <em>+70</em>
+                  </div>
+                  <small>Predict your score, set your goal, and follow a focused plan to close the gap.</small>
+                </div>
+                <div className="auth-goal-setter">
+                  <div className="auth-goal-setter-head">
+                    <span>🎯 Set your goal score</span>
+                    <em>On track</em>
+                  </div>
+                  <div className="auth-goal-target">
+                    <strong>1550</strong>
+                    <span>/1600</span>
+                  </div>
+                  <div className="auth-goal-slider" aria-hidden="true">
+                    <i />
+                    <b />
+                  </div>
+                  <div className="auth-goal-ticks">
+                    <span>400</span>
+                    <span>800</span>
+                    <span>1200</span>
+                    <span>1600</span>
+                  </div>
+                  <p>You need <strong>+30</strong> more points to reach your goal</p>
+                </div>
+                <div className="auth-goal-bars">
+                  <div><span>Math</span><em>790/800</em><i><b style={{ width: "98%" }} /></i></div>
+                  <div><span>Reading & Writing</span><em>730/800</em><i><b className="cyan" style={{ width: "91%" }} /></i></div>
+                  <div><span>Weak-area focus</span><em>Geometry · 12 drills left</em><i><b className="violet" style={{ width: "64%" }} /></i></div>
+                </div>
+              </section>
             </div>
             <div className="auth-page-proof">
               <span>10,000+ questions</span>
