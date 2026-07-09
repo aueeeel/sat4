@@ -682,7 +682,7 @@ export default function App() {
     }
 
     return (
-      <main className="auth-shell auth-shell-warp">
+      <main className="auth-shell auth-shell-warp guest-landing-shell">
         <section className="auth-video-intro">
           <video src="/hero/road-background.mp4" autoPlay muted loop playsInline />
           <div className="auth-video-intro-overlay" />
@@ -707,8 +707,31 @@ export default function App() {
               готовимся вместе
             </div>
             <h1>sat4.me practice workspace</h1>
+            <p>
+              Practice smarter with focused SAT modules, vocabulary cards, live battles, and progress that shows exactly what to fix next.
+            </p>
+            <div className="video-hero-actions auth-hero-actions">
+              <button className="primary-button" onClick={() => openAuthPage("sign-up")}>
+                Start practicing
+                <ChevronRight size={17} />
+              </button>
+              <button className="hero-ghost-button" onClick={() => openAuthPage("sign-in")}>
+                I already have an account
+              </button>
+            </div>
           </section>
         </section>
+
+        <div className="landing-continuation guest-landing-continuation">
+          <StudentResultsShowcase onTryPractice={() => openAuthPage("sign-up")} />
+
+          <MotivationShowcase
+            onOpenStudy={() => openAuthPage("sign-up")}
+            onPlayArena={() => openAuthPage("sign-up")}
+          />
+
+          <FeatureCardsShowcase />
+        </div>
       </main>
     );
   }
