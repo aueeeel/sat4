@@ -183,7 +183,7 @@ export default function App() {
   const [authMode, setAuthMode] = useState<"sign-in" | "sign-up">("sign-up");
   const [authError, setAuthError] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
-  const [authDialogOpen, setAuthDialogOpen] = useState(false);
+  const [authPageOpen, setAuthPageOpen] = useState(false);
   const [answersVersion, setAnswersVersion] = useState(0);
   const [activeSection, setActiveSection] = useState<Section>("Verbal");
   const [bankView, setBankView] = useState<"home" | "bank" | "topics" | "vocabulary" | "arena" | "study" | "friends">(() => {
@@ -401,7 +401,7 @@ export default function App() {
 
       saveStoredUser(user);
       setCurrentUser(user);
-      setAuthDialogOpen(false);
+      setAuthPageOpen(false);
     } catch (error) {
       if (error instanceof TypeError) {
         setAuthError("API server is not running. Start the site with npm run dev.");
@@ -550,26 +550,114 @@ export default function App() {
     setCurrentUser(null);
   };
 
-  const openAuthDialog = (mode: "sign-in" | "sign-up") => {
+  const openAuthPage = (mode: "sign-in" | "sign-up") => {
     setAuthMode(mode);
     setAuthError("");
-    setAuthDialogOpen(true);
+    setAuthPageOpen(true);
   };
 
   if (!currentUser) {
+    if (authPageOpen) {
+      return (
+        <main className="auth-page-shell">
+          <section className="auth-page-media" aria-label="sat4.me video preview">
+            <video src="/hero/road-background.mp4" autoPlay muted loop playsInline />
+            <div className="auth-page-media-overlay" />
+            <nav className="auth-page-brand">
+              <img className="brand-logo" src="/brand/4sat-logo.png" alt="sat4.me logo" />
+              <span>sat4.me</span>
+            </nav>
+            <div className="auth-score-preview">
+              <span className="award-pill auth-page-pill">готовимся вместе</span>
+              <div className="auth-preview-card">
+                <div>
+                  <small>Estimated SAT</small>
+                  <strong>1520</strong>
+                </div>
+                <span>target<br />1550+</span>
+                <p>Adaptive practice, focused review loops, and live battle motivation.</p>
+                <div className="auth-preview-bars">
+                  <i style={{ width: "92%" }} />
+                  <i style={{ width: "84%" }} />
+                  <i style={{ width: "76%" }} />
+                </div>
+              </div>
+            </div>
+            <div className="auth-page-proof">
+              <span>10,000+ questions</span>
+              <span>Math + Reading & Writing</span>
+            </div>
+          </section>
+
+          <section className="auth-page-panel" aria-label={authMode === "sign-up" ? "Create account" : "Sign in"}>
+            <div className="auth-page-tabs" role="tablist" aria-label="Account type">
+              <button className="active" type="button">Студент</button>
+              <button type="button">Учитель / учебный центр</button>
+            </div>
+            <div className="auth-page-copy">
+              <button className="auth-page-back" type="button" onClick={() => setAuthPageOpen(false)}>
+                <ChevronLeft size={16} />
+                назад
+              </button>
+              <p className="eyebrow">SAT PREP ACCOUNT</p>
+              <h1>{authMode === "sign-up" ? "Создать аккаунт" : "С возвращением"}</h1>
+              <p>
+                {authMode === "sign-up" ? "Уже есть аккаунт? " : "Нет аккаунта? "}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthMode(authMode === "sign-up" ? "sign-in" : "sign-up");
+                    setAuthError("");
+                  }}
+                >
+                  {authMode === "sign-up" ? "Войти" : "Зарегистрироваться"}
+                </button>
+              </p>
+            </div>
+
+            <div className="auth-page-card">
+              <form onSubmit={handleAuth}>
+                {authMode === "sign-up" && (
+                  <>
+                    <input name="fullName" placeholder="Full name" autoComplete="name" />
+                    <input name="nickname" placeholder="Nickname" autoComplete="nickname" />
+                    <input name="age" placeholder="Age" type="number" min="5" max="99" autoComplete="off" />
+                  </>
+                )}
+                <input name="gmail" placeholder="you@example.com" type="email" autoComplete="username" />
+                <input
+                  name="password"
+                  placeholder="Password"
+                  type="password"
+                  autoComplete={authMode === "sign-up" ? "new-password" : "current-password"}
+                />
+                {authError && <p className="form-error">{authError}</p>}
+                <button className="primary-button full auth-page-submit" type="submit" disabled={authLoading}>
+                  <ChevronRight size={18} />
+                  {authLoading ? "Please wait..." : authMode === "sign-up" ? "Создать аккаунт" : "Войти"}
+                </button>
+              </form>
+            </div>
+          </section>
+        </main>
+      );
+    }
+
     return (
       <main className="auth-shell auth-shell-warp">
-        <WarpBackground className="auth-warp-background">
+        <section className="auth-video-intro">
+          <video src="/hero/road-background.mp4" autoPlay muted loop playsInline />
+          <div className="auth-video-intro-overlay" />
           <nav className="top-nav auth-top-nav">
             <div className="brand">
               <img className="brand-logo" src="/brand/4sat-logo.png" alt="sat4.me logo" />
               <span>sat4.me</span>
             </div>
             <div className="auth-nav-actions">
-              <button className="ghost-button" onClick={() => openAuthDialog("sign-in")}>
+              <button className="ghost-button" onClick={() => openAuthPage("sign-in")}>
                 Войти
               </button>
-              <button className="primary-button" onClick={() => openAuthDialog("sign-up")}>
+              <button className="primary-button" onClick={() => openAuthPage("sign-up")}>
                 Создать аккаунт
               </button>
             </div>
@@ -582,57 +670,7 @@ export default function App() {
             </div>
             <h1>sat4.me practice workspace</h1>
           </section>
-
-          {authDialogOpen && (
-            <div className="auth-dialog-backdrop" role="presentation" onMouseDown={() => setAuthDialogOpen(false)}>
-              <section className="auth-dialog" role="dialog" aria-modal="true" aria-label="Authentication" onMouseDown={(event) => event.stopPropagation()}>
-              <header className="auth-dialog-header">
-                <div>
-                  <p className="eyebrow">{authMode === "sign-up" ? "New student" : "Welcome back"}</p>
-                  <h2>{authMode === "sign-up" ? "Create your account" : "Sign in to sat4.me"}</h2>
-                </div>
-                <button className="auth-dialog-close" onClick={() => setAuthDialogOpen(false)} aria-label="Close authentication dialog">
-                  <X size={18} />
-                </button>
-              </header>
-              <div className="auth-dialog-body">
-                <form onSubmit={handleAuth}>
-                  {authMode === "sign-up" && (
-                    <>
-                      <input name="fullName" placeholder="Full name" autoComplete="name" />
-                      <input name="nickname" placeholder="Nickname" autoComplete="nickname" />
-                      <input name="age" placeholder="Age" type="number" min="5" max="99" autoComplete="off" />
-                    </>
-                  )}
-                  <input name="gmail" placeholder="Gmail" type="email" autoComplete="username" />
-                  <input
-                    name="password"
-                    placeholder="Password"
-                    type="password"
-                    autoComplete={authMode === "sign-up" ? "new-password" : "current-password"}
-                  />
-                  {authError && <p className="form-error">{authError}</p>}
-                  <button className="primary-button full" type="submit" disabled={authLoading}>
-                    {authLoading ? "Please wait..." : authMode === "sign-up" ? "Create account" : "Sign in"}
-                  </button>
-                </form>
-              </div>
-              <footer className="auth-dialog-footer">
-                <span>{authMode === "sign-up" ? "Already have an account?" : "New to sat4.me?"}</span>
-                <button
-                  className="ghost-button"
-                  onClick={() => {
-                    setAuthMode(authMode === "sign-up" ? "sign-in" : "sign-up");
-                    setAuthError("");
-                  }}
-                >
-                  {authMode === "sign-up" ? "Sign in" : "Create account"}
-                </button>
-              </footer>
-              </section>
-            </div>
-          )}
-        </WarpBackground>
+        </section>
       </main>
     );
   }
