@@ -1634,7 +1634,10 @@ input:focus {
 
 .home-shell .student-results-showcase,
 .home-shell .motivation-showcase,
-.home-shell .feature-showcase {
+.home-shell .feature-showcase,
+.guest-landing-shell .student-results-showcase,
+.guest-landing-shell .motivation-showcase,
+.guest-landing-shell .feature-showcase {
   position: relative;
   z-index: 2;
   width: min(1120px, calc(100% - 48px));
@@ -1647,7 +1650,8 @@ input:focus {
   backdrop-filter: blur(18px);
 }
 
-.home-shell .motivation-showcase {
+.home-shell .motivation-showcase,
+.guest-landing-shell .motivation-showcase {
   width: min(900px, calc(100% - 48px));
 }
 
@@ -6641,7 +6645,10 @@ input:focus {
   .landing-stats,
   .home-shell .student-results-showcase,
   .home-shell .motivation-showcase,
-  .home-shell .feature-showcase {
+  .home-shell .feature-showcase,
+  .guest-landing-shell .student-results-showcase,
+  .guest-landing-shell .motivation-showcase,
+  .guest-landing-shell .feature-showcase {
     width: calc(100% - 24px);
   }
 
