@@ -150,32 +150,46 @@ a {
   text-shadow: 0 22px 64px rgba(0, 0, 0, 0.38);
 }
 
-.auth-video-intro .auth-hero p {
-  max-width: 760px;
-  margin: 28px auto 0;
-  color: rgba(255, 255, 255, 0.74);
-  font-size: clamp(17px, 1.55vw, 22px);
-  line-height: 1.55;
+.auth-video-intro .award-pill {
+  color: rgba(255, 255, 255, 0.86);
+  border-color: rgba(84, 226, 192, 0.62);
+  background: rgba(8, 13, 26, 0.34);
+  backdrop-filter: blur(16px);
 }
 
-.auth-hero-actions {
-  justify-content: center;
-  margin-top: 34px;
+.guest-video-hero {
+  min-height: 100vh;
+  margin: 0;
+  border-radius: 0;
 }
 
-.auth-hero-actions .primary-button,
-.auth-hero-actions .hero-ghost-button {
-  min-height: 58px;
-  padding: 0 28px;
-  border-radius: 999px;
-  font-size: 15px;
+.guest-hero-nav {
+  position: absolute;
+  top: 28px;
+  left: 50%;
+  z-index: 4;
+  width: min(1120px, calc(100% - 48px));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  transform: translateX(-50%);
 }
 
-.auth-hero-actions .hero-ghost-button {
+.guest-hero-nav .brand {
+  color: #ffffff;
+  text-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
+}
+
+.guest-hero-nav .brand-logo {
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.22);
+}
+
+.guest-hero-nav .ghost-button {
   color: rgba(255, 255, 255, 0.92);
   border-color: rgba(255, 255, 255, 0.34);
-  background: rgba(255, 255, 255, 0.13);
-  backdrop-filter: blur(16px);
+  background: rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(18px);
 }
 
 .guest-landing-continuation {
@@ -183,13 +197,6 @@ a {
   z-index: 2;
   padding-top: 56px;
   padding-bottom: 96px;
-}
-
-.auth-video-intro .award-pill {
-  color: rgba(255, 255, 255, 0.86);
-  border-color: rgba(84, 226, 192, 0.62);
-  background: rgba(8, 13, 26, 0.34);
-  backdrop-filter: blur(16px);
 }
 
 .auth-page-shell {
@@ -3621,6 +3628,26 @@ input:focus {
 
   .auth-video-intro .auth-hero h1 {
     font-size: clamp(54px, 18vw, 86px);
+  }
+
+  .guest-hero-nav {
+    top: 16px;
+    width: min(100% - 24px, 1120px);
+  }
+
+  .guest-hero-nav .brand span {
+    font-size: 17px;
+  }
+
+  .guest-hero-nav .auth-nav-actions {
+    gap: 6px;
+  }
+
+  .guest-hero-nav .ghost-button,
+  .guest-hero-nav .primary-button {
+    min-height: 36px;
+    padding: 0 10px;
+    font-size: 12px;
   }
 
   .auth-page-shell {

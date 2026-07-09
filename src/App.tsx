@@ -683,10 +683,10 @@ export default function App() {
 
     return (
       <main className="auth-shell auth-shell-warp guest-landing-shell">
-        <section className="auth-video-intro">
-          <video src="/hero/road-background.mp4" autoPlay muted loop playsInline />
-          <div className="auth-video-intro-overlay" />
-          <nav className="top-nav auth-top-nav">
+        <section className="video-hero guest-video-hero">
+          <video className="video-hero-media" src="/hero/road-background.mp4" autoPlay muted loop playsInline />
+          <div className="video-hero-overlay" />
+          <nav className="guest-hero-nav">
             <div className="brand">
               <img className="brand-logo" src="/brand/4sat-logo.png" alt="sat4.me logo" />
               <span>sat4.me</span>
@@ -701,25 +701,29 @@ export default function App() {
             </div>
           </nav>
 
-          <section className="auth-hero">
-            <div className="award-pill">
-              <Rocket size={18} />
-              готовимся вместе
-            </div>
-            <h1>sat4.me practice workspace</h1>
+          <div className="video-hero-content">
+            <p className="eyebrow">готовимся вместе</p>
+            <h1>
+              <span className="score-headline">
+                Are you stuck at
+                <span className="score-line">
+                  <ScoreTypewriter scores={["1230", "1280", "1350", "1410"]} />?
+                </span>
+              </span>
+            </h1>
             <p>
-              Practice smarter with focused SAT modules, vocabulary cards, live battles, and progress that shows exactly what to fix next.
+              Practice smarter with focused SAT modules, vocabulary cards, battles, and progress that shows exactly what to fix next.
             </p>
-            <div className="video-hero-actions auth-hero-actions">
+            <div className="video-hero-actions">
               <button className="primary-button" onClick={() => openAuthPage("sign-up")}>
                 Start practicing
                 <ChevronRight size={17} />
               </button>
-              <button className="hero-ghost-button" onClick={() => openAuthPage("sign-in")}>
-                I already have an account
+              <button className="hero-ghost-button" onClick={() => openAuthPage("sign-up")}>
+                Open vocabulary
               </button>
             </div>
-          </section>
+          </div>
         </section>
 
         <div className="landing-continuation guest-landing-continuation">
