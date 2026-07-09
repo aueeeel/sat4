@@ -562,8 +562,8 @@ export default function App() {
         <WarpBackground className="auth-warp-background">
           <nav className="top-nav auth-top-nav">
             <div className="brand">
-              <img className="brand-logo" src="/brand/4sat-logo.png" alt="4sat logo" />
-              <span>4sat</span>
+              <img className="brand-logo" src="/brand/4sat-logo.png" alt="sat4.me logo" />
+              <span>sat4.me</span>
             </div>
             <div className="auth-nav-actions">
               <button className="ghost-button" onClick={() => openAuthDialog("sign-in")}>
@@ -578,9 +578,9 @@ export default function App() {
           <section className="auth-hero">
             <div className="award-pill">
               <Rocket size={18} />
-              SAT practice workspace
+              готовимся вместе
             </div>
-            <h1>Digital SAT practice workspace</h1>
+            <h1>sat4.me practice workspace</h1>
           </section>
 
           {authDialogOpen && (
@@ -589,7 +589,7 @@ export default function App() {
               <header className="auth-dialog-header">
                 <div>
                   <p className="eyebrow">{authMode === "sign-up" ? "New student" : "Welcome back"}</p>
-                  <h2>{authMode === "sign-up" ? "Create your account" : "Sign in to 4sat"}</h2>
+                  <h2>{authMode === "sign-up" ? "Create your account" : "Sign in to sat4.me"}</h2>
                 </div>
                 <button className="auth-dialog-close" onClick={() => setAuthDialogOpen(false)} aria-label="Close authentication dialog">
                   <X size={18} />
@@ -618,7 +618,7 @@ export default function App() {
                 </form>
               </div>
               <footer className="auth-dialog-footer">
-                <span>{authMode === "sign-up" ? "Already have an account?" : "New to 4sat?"}</span>
+                <span>{authMode === "sign-up" ? "Already have an account?" : "New to sat4.me?"}</span>
                 <button
                   className="ghost-button"
                   onClick={() => {
@@ -891,8 +891,8 @@ export default function App() {
             window.scrollTo({ top: 0, behavior: "smooth" });
           }}
         >
-          <img className="brand-logo" src="/brand/4sat-logo.png" alt="4sat logo" />
-          <span>4sat</span>
+          <img className="brand-logo" src="/brand/4sat-logo.png" alt="sat4.me logo" />
+          <span>sat4.me</span>
         </button>
         <ExpandableActionBar
           items={[
@@ -1001,7 +1001,7 @@ export default function App() {
             <video className="video-hero-media" src="/hero/road-background.mp4" autoPlay muted loop playsInline />
             <div className="video-hero-overlay" />
             <div className="video-hero-content">
-              <p className="eyebrow">4sat practice workspace</p>
+              <p className="eyebrow">готовимся вместе</p>
               <h1>
                 <span className="score-headline">
                   Are you stuck at
@@ -1522,28 +1522,29 @@ function MotivationShowcase({ onOpenStudy, onPlayArena }: { onOpenStudy: () => v
   ];
 
   return (
-    <section className="motivation-showcase" aria-label="Study with friends">
+    <section className="motivation-showcase" aria-label="SAT Battle invitation">
       <div className="motivation-copy">
-        <p className="eyebrow">social study</p>
+        <p className="eyebrow">?? SAT BATTLE</p>
         <h2>
-          Feeling overwhelmed while preparing?
-          <span>Find your <em>friends</em> &amp; <em>motivation</em> here.</span>
+          Challenge
+          <span>your <em>friends.</em></span>
+          <span><em>Win</em> together.</span>
         </h2>
         <p>
-          Join camera-only study rooms, challenge classmates, and keep moving when SAT prep starts feeling too heavy.
+          Play live SAT battles in 1v1 or team mode. Race against real students, sharpen your skills, and climb the leaderboard.
         </p>
         <div className="motivation-actions">
-          <button className="primary-button" onClick={onOpenStudy}>
-            Study rooms
-            <Video size={17} />
+          <button className="primary-button" onClick={onPlayArena}>
+            Try Battle
+            <ChevronRight size={17} />
           </button>
-          <button className="hero-ghost-button motivation-ghost" onClick={onPlayArena}>
-            Play
+          <button className="hero-ghost-button motivation-ghost" onClick={onOpenStudy}>
+            Team rooms
             <Trophy size={17} />
           </button>
         </div>
         <div className="friend-dock-preview" aria-label="Friends dock preview">
-          <span className="friend-dock-sparkle">✦</span>
+          <span className="friend-dock-sparkle">?</span>
           {dockFriends.map((friend) => (
             <span
               key={friend.name}
@@ -1557,17 +1558,33 @@ function MotivationShowcase({ onOpenStudy, onPlayArena }: { onOpenStudy: () => v
         </div>
       </div>
 
-      <div className="meeting-video-card" aria-label="Live study room preview">
-        <div className="meeting-topbar">
-          <span />
-          <strong>Study Room 01</strong>
-          <em>LIVE</em>
+      <div className="battle-visual-card" aria-label="Live SAT battle preview">
+        <div className="battle-orbit" aria-hidden="true" />
+        <div className="battle-topbar">
+          <span>02:14</span>
+          <strong>Live SAT Battle</strong>
+          <em>Round 7/10</em>
         </div>
-        <div className="meeting-grid">
-          <div className="meeting-tile main"><span>Camera on</span></div>
-          <div className="meeting-tile"><span>Math focus</span></div>
-          <div className="meeting-tile"><span>Verbal block</span></div>
-          <div className="meeting-tile"><span>Silent mode</span></div>
+        <div className="battle-player-card player-one">
+          <span>A</span>
+          <div><strong>Aisultan</strong><em>+820 pts</em></div>
+        </div>
+        <div className="battle-player-card player-two">
+          <span>M</span>
+          <div><strong>Madina</strong><em>+760 pts</em></div>
+        </div>
+        <div className="battle-question-card">
+          <small>Question type</small>
+          <strong>Linear Functions</strong>
+          <div><span>1v1</span><span>Team</span><span>Live</span></div>
+        </div>
+        <div className="battle-leaderboard">
+          <p>Leaderboard</p>
+          <ol>
+            <li><span>1</span>Aisultan <strong>4820</strong></li>
+            <li><span>2</span>Madina <strong>4760</strong></li>
+            <li><span>3</span>Team Blue <strong>4380</strong></li>
+          </ol>
         </div>
       </div>
     </section>
@@ -1594,9 +1611,9 @@ function FeatureCardsShowcase() {
   ];
 
   return (
-    <section className="feature-showcase" aria-label="4sat advantages">
+    <section className="feature-showcase" aria-label="sat4.me advantages">
       <div className="feature-showcase-head">
-        <p className="eyebrow">why 4sat</p>
+        <p className="eyebrow">why sat4.me</p>
         <h2>Everything students need after the lesson.</h2>
       </div>
       <div className="feature-card-grid">
@@ -1611,7 +1628,7 @@ function FeatureCardsShowcase() {
             <h3>{card.title}</h3>
             <div className="code-editor">
               <pre>
-                <code>{card.lines.map((line) => `✓ ${line}`).join("\n")}</code>
+                <code>{card.lines.map((line) => `? ${line}`).join("\n")}</code>
               </pre>
             </div>
           </article>
@@ -1953,7 +1970,7 @@ function ArenaView({ currentUser }: { currentUser: UserProfile }) {
     return (
       <section className="arena-page">
         <div className="arena-hero">
-          <p className="eyebrow">4sat Arena</p>
+          <p className="eyebrow">sat4.me Arena</p>
           <h1>Play SAT battles with friends.</h1>
           <p>Create a private room, choose Math or Reading & Writing modules, and race through random questions.</p>
         </div>
@@ -2665,8 +2682,8 @@ function StudyRoomDock({
   onClose: () => void;
 }) {
   const room = studyRooms.find((item) => item.id === roomId) ?? studyRooms[0];
-  const roomName = `4sat-${room.id}`;
-  const displayName = encodeURIComponent(currentUser.nickname || currentUser.name || "4sat student");
+  const roomName = `sat4-${room.id}`;
+  const displayName = encodeURIComponent(currentUser.nickname || currentUser.name || "sat4.me student");
   const videoUrl = `https://meet.jit.si/${roomName}#userInfo.displayName=\"${displayName}\"&config.startWithAudioMuted=true&config.startSilent=true&config.prejoinConfig.enabled=false&interfaceConfig.TOOLBAR_BUTTONS=[\"camera\",\"tileview\",\"hangup\"]`;
 
   return (
@@ -2887,3 +2904,4 @@ function ExpandableActionBar({ items }: { items: ActionBarItem[] }) {
     </div>
   );
 }
+
