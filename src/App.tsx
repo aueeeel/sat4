@@ -1026,15 +1026,7 @@ export default function App() {
           </section>
 
           <div className="landing-continuation">
-            <section className="landing-stats" aria-label="Overall progress">
-              <div className="stats-strip">
-                <Metric icon={<ClipboardCheck size={20} />} label="Answered" value={`${totalAnswered}/${questions.length}`} />
-                <Metric icon={<Gauge size={20} />} label="Accuracy" value={`${totalAccuracy}%`} />
-                <Metric icon={<Trophy size={20} />} label="Correct" value={String(totalCorrect)} />
-              </div>
-            </section>
-
-            <StudentResultsShowcase />
+            <StudentResultsShowcase onPlayArena={() => setBankView("arena")} />
 
             <FeatureCardsShowcase />
           </div>
@@ -1474,15 +1466,19 @@ function ScoreTypewriter({ scores }: { scores: string[] }) {
   );
 }
 
-function StudentResultsShowcase() {
+function StudentResultsShowcase({ onPlayArena }: { onPlayArena: () => void }) {
   const cards = Array.from({ length: 8 }, (_, index) => index);
 
   return (
     <section className="student-results-showcase" aria-label="Student SAT results">
       <div className="results-copy">
-        <p className="eyebrow">student results</p>
-        <h2>Real progress looks loud.</h2>
-        <p>Replace random practice with targeted modules, review loops, and SAT-style pressure that keeps students moving.</p>
+        <p className="eyebrow">live battles</p>
+        <h2>Challenge your friends. Win together.</h2>
+        <p>Compete in real-time SAT quizzes. Play 1v1 duels or team battles, climb the leaderboard, and improve faster.</p>
+        <button className="primary-button results-play-button" onClick={onPlayArena}>
+          Play 1v1
+          <ChevronRight size={17} />
+        </button>
       </div>
       <div className="results-carousel-wrapper" aria-label="Rotating SAT score result cards">
         <div className="results-carousel-inner">
