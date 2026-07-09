@@ -1557,37 +1557,67 @@ function MotivationShowcase({ onOpenStudy, onPlayArena }: { onOpenStudy: () => v
         </div>
       </div>
 
-      <div className="battle-visual-card" aria-label="Live SAT battle preview">
-        <div className="battle-orbit" aria-hidden="true" />
-        <div className="battle-topbar">
-          <span>02:14</span>
-          <strong>Live SAT Battle</strong>
-          <em>Round 7/10</em>
+      <div className="score-journey-stage" aria-label="SAT score journey preview">
+        <div className="score-orbit-dots" aria-hidden="true">
+          <span />
+          <span />
+          <span />
         </div>
-        <div className="battle-visual-heading">
-          <em>Win</em> together.
-        </div>
-        <div className="battle-player-card player-one">
-          <span>A</span>
-          <div><strong>Aisultan</strong><em>+820 pts</em></div>
-        </div>
-        <div className="battle-player-card player-two">
-          <span>M</span>
-          <div><strong>Madina</strong><em>+760 pts</em></div>
-        </div>
-        <div className="battle-question-card">
-          <small>Question type</small>
-          <strong>Linear Functions</strong>
-          <div><span>1v1</span><span>Team</span><span>Live</span></div>
-        </div>
-        <div className="battle-leaderboard">
-          <p>Leaderboard</p>
-          <ol>
-            <li><span>1</span>Aisultan <strong>4820</strong></li>
-            <li><span>2</span>Madina <strong>4760</strong></li>
-            <li><span>3</span>Team Blue <strong>4380</strong></li>
-          </ol>
-        </div>
+        <section className="score-journey-card">
+          <div className="score-lightning" aria-hidden="true">
+            <i />
+            <span />
+          </div>
+          <div className="score-card-top">
+            <div className="score-brand-mark">
+              <BookOpenCheck size={17} />
+            </div>
+            <div>
+              <small>sat4.me</small>
+              <strong>Digital SAT Suite</strong>
+            </div>
+            <span className="score-live-pill"><i /> Live practice</span>
+          </div>
+          <div className="score-main">
+            <p>Your projected score</p>
+            <div>
+              <strong>1520</strong>
+              <span>/1600</span>
+              <em>+70</em>
+            </div>
+            <small>Top 99th percentile after adaptive drills and focused battle review.</small>
+          </div>
+          <div className="score-bars">
+            <div className="score-bar-row">
+              <span><i className="score-dot amber" />Math</span>
+              <em>790/800</em>
+              <div><b style={{ width: "98%" }} /></div>
+            </div>
+            <div className="score-bar-row">
+              <span><i className="score-dot cyan" />Reading & Writing</span>
+              <em>730/800</em>
+              <div><b className="cyan" style={{ width: "91%" }} /></div>
+            </div>
+            <div className="score-bar-row">
+              <span><i className="score-dot violet" />Weak-area focus</span>
+              <em>Geometry · 12 drills</em>
+              <div><b className="violet" style={{ width: "64%" }} /></div>
+            </div>
+          </div>
+          <div className="score-chip-row">
+            <span>Advanced Math</span>
+            <span>Evidence Reading</span>
+            <span>Timed sets</span>
+          </div>
+          <div className="score-card-actions">
+            <button onClick={onPlayArena}>Continue battle <ChevronRight size={15} /></button>
+            <span><Clock3 size={15} /> 42m</span>
+          </div>
+          <div className="score-card-footer">
+            <span>Next mock · Saturday</span>
+            <span>14-day streak</span>
+          </div>
+        </section>
       </div>
     </section>
   );
