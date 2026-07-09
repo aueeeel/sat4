@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,500;0,600;0,700;1,500;1,600;1,700&family=Montserrat:wght@400;500;600;700;800;900&display=swap");
+﻿@import url("https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,500;0,600;0,700;1,500;1,600;1,700&family=Montserrat:wght@400;500;600;700;800;900&display=swap");
 
 :root {
   --mint: #54e2c0;
@@ -14,7 +14,7 @@
   --muted: #67534e;
   color: var(--ink);
   background: var(--paper);
-  font-family: Montserrat, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: Helvetica, Arial, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
@@ -31,7 +31,7 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  font-family: Montserrat, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: Helvetica, Arial, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(244, 250, 238, 0.9)),
     url("/landing/flower-background.png") center top / cover fixed no-repeat,
@@ -54,7 +54,7 @@ button,
 input,
 textarea,
 select {
-  font-family: Montserrat, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: Helvetica, Arial, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 button {
@@ -149,8 +149,9 @@ a {
 .brand-logo {
   width: 34px;
   height: 34px;
-  object-fit: contain;
-  mix-blend-mode: multiply;
+  object-fit: cover;
+  border-radius: 9px;
+  mix-blend-mode: normal;
 }
 
 .ghost-button,
@@ -490,7 +491,7 @@ input:focus {
 }
 
 .home-shell .brand-logo {
-  filter: brightness(0) invert(1);
+  filter: none;
   mix-blend-mode: normal;
 }
 
@@ -885,6 +886,10 @@ input:focus {
   backdrop-filter: blur(18px);
 }
 
+.home-shell .motivation-showcase {
+  width: min(980px, calc(100% - 48px));
+}
+
 .score-typewriter {
   display: inline-block;
   min-width: 0.08em;
@@ -962,11 +967,11 @@ input:focus {
 .results-copy h2 {
   margin: 8px 0 16px;
   color: #080d1a;
-  font-family: Lora, Georgia, serif;
+  font-family: Helvetica, Arial, ui-sans-serif, system-ui, sans-serif;
   font-size: clamp(42px, 4.6vw, 74px);
-  font-weight: 700;
-  line-height: 1;
-  letter-spacing: -0.045em;
+  font-weight: 850;
+  line-height: 0.94;
+  letter-spacing: -0.072em;
 }
 
 .results-copy h2 span {
@@ -1056,12 +1061,12 @@ input:focus {
   position: relative;
   z-index: 2;
   display: grid;
-  grid-template-columns: minmax(300px, 0.9fr) minmax(320px, 1.1fr);
-  gap: clamp(28px, 5vw, 70px);
+  grid-template-columns: minmax(260px, 0.78fr) minmax(340px, 1.22fr);
+  gap: clamp(24px, 4vw, 52px);
   align-items: center;
-  min-height: 560px;
-  margin: 0 0 72px;
-  padding: clamp(48px, 6vw, 80px);
+  min-height: 460px;
+  margin: 0 auto 72px;
+  padding: clamp(32px, 4.5vw, 52px);
   overflow: hidden;
   border: 1px solid rgba(255, 145, 0, 0.22);
   border-radius: 28px;
@@ -1094,11 +1099,11 @@ input:focus {
 .motivation-copy h2 {
   margin: 8px 0 18px;
   color: #080d1a;
-  font-family: Lora, Georgia, serif;
-  font-size: clamp(48px, 5vw, 84px);
-  font-weight: 700;
-  line-height: 1;
-  letter-spacing: -0.048em;
+  font-family: Helvetica, Arial, ui-sans-serif, system-ui, sans-serif;
+  font-size: clamp(44px, 4.4vw, 66px);
+  font-weight: 850;
+  line-height: 0.92;
+  letter-spacing: -0.072em;
 }
 
 .motivation-copy h2 span {
@@ -1141,10 +1146,10 @@ input:focus {
 }
 
 .battle-visual-card {
-  min-height: 420px;
+  min-height: 340px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.7);
-  border-radius: 32px;
+  border-radius: 28px;
   background:
     radial-gradient(circle at 30% 20%, rgba(255, 145, 0, 0.32), transparent 32%),
     radial-gradient(circle at 78% 70%, rgba(84, 226, 192, 0.3), transparent 34%),
@@ -1152,7 +1157,7 @@ input:focus {
   box-shadow:
     0 34px 90px rgba(15, 23, 42, 0.28),
     inset 0 1px 0 rgba(255, 255, 255, 0.22);
-  transform: perspective(1100px) rotateY(-4deg) rotateX(2deg);
+  transform: perspective(1100px) rotateY(-3deg) rotateX(1.5deg);
 }
 
 .battle-orbit {
@@ -1199,15 +1204,34 @@ input:focus {
 }
 
 .battle-topbar {
-  top: 24px;
-  left: 24px;
-  right: 24px;
+  top: 18px;
+  left: 18px;
+  right: 18px;
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 12px 14px;
   border-radius: 999px;
   color: #ffffff;
+}
+
+.battle-visual-heading {
+  position: absolute;
+  top: 74px;
+  left: 28px;
+  z-index: 2;
+  color: #ffffff;
+  font-size: clamp(30px, 3.2vw, 46px);
+  font-weight: 900;
+  line-height: 0.94;
+  letter-spacing: -0.07em;
+  text-shadow: 0 14px 36px rgba(0, 0, 0, 0.24);
+}
+
+.battle-visual-heading em {
+  color: var(--sunset);
+  font-family: Lora, Georgia, serif;
+  font-style: italic;
 }
 
 .battle-topbar span {
@@ -1262,22 +1286,22 @@ input:focus {
 }
 
 .player-one {
-  top: 100px;
-  left: 34px;
+  top: 146px;
+  left: 26px;
 }
 
 .player-two {
-  top: 156px;
-  right: 34px;
+  top: 116px;
+  right: 26px;
   animation-delay: -2.8s;
 }
 
 .battle-question-card {
   left: 50%;
-  top: 50%;
-  width: min(300px, 72%);
-  padding: 22px;
-  border-radius: 28px;
+  top: 55%;
+  width: min(270px, 70%);
+  padding: 18px;
+  border-radius: 24px;
   color: #ffffff;
   transform: translate(-50%, -48%);
 }
@@ -1294,7 +1318,7 @@ input:focus {
 .battle-question-card strong {
   display: block;
   margin-top: 6px;
-  font-size: 30px;
+  font-size: 25px;
   letter-spacing: -0.06em;
 }
 
@@ -1314,11 +1338,11 @@ input:focus {
 }
 
 .battle-leaderboard {
-  right: 28px;
-  bottom: 28px;
-  width: min(270px, 58%);
-  padding: 16px;
-  border-radius: 24px;
+  right: 22px;
+  bottom: 20px;
+  width: min(250px, 58%);
+  padding: 14px;
+  border-radius: 22px;
   color: #ffffff;
 }
 
@@ -1640,7 +1664,7 @@ input:focus {
 .code-editor code {
   display: block;
   white-space: pre-wrap;
-  font-family: Montserrat, system-ui, sans-serif;
+  font-family: Helvetica, Arial, system-ui, sans-serif;
 }
 
 .auth-warp-background {
@@ -4428,7 +4452,7 @@ input:focus {
   grid-template-rows: 78px 1fr 78px;
   color: var(--ink);
   background: #ffffff;
-  font-family: Montserrat, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: Helvetica, Arial, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 .sat-topbar,
@@ -4473,7 +4497,7 @@ input:focus {
 }
 
 .sat-directions::after {
-  content: "⌄";
+  content: "вЊ„";
   margin-left: 6px;
 }
 
@@ -4956,7 +4980,7 @@ input:focus {
 }
 
 .sat-count::after {
-  content: ⌄;
+  content: вЊ„;
   margin-left: 8px;
 }
 
@@ -5452,3 +5476,4 @@ input:focus {
     grid-template-columns: 1fr;
   }
 }
+

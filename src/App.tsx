@@ -1528,7 +1528,6 @@ function MotivationShowcase({ onOpenStudy, onPlayArena }: { onOpenStudy: () => v
         <h2>
           Challenge
           <span>your <em>friends.</em></span>
-          <span><em>Win</em> together.</span>
         </h2>
         <p>
           Play live SAT battles in 1v1 or team mode. Race against real students, sharpen your skills, and climb the leaderboard.
@@ -1564,6 +1563,9 @@ function MotivationShowcase({ onOpenStudy, onPlayArena }: { onOpenStudy: () => v
           <span>02:14</span>
           <strong>Live SAT Battle</strong>
           <em>Round 7/10</em>
+        </div>
+        <div className="battle-visual-heading">
+          <em>Win</em> together.
         </div>
         <div className="battle-player-card player-one">
           <span>A</span>
