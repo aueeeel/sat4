@@ -131,7 +131,7 @@ a {
   color: var(--ink);
   background: transparent;
   font-size: 20px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .brand-mark {
@@ -143,7 +143,7 @@ a {
   background: #0b1120;
   border-radius: 8px;
   font-size: 18px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .brand-logo {
@@ -173,7 +173,7 @@ a {
   padding: 0 16px;
   border-radius: 10px;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
   box-shadow: 0 10px 24px -22px rgba(15, 23, 42, 0.65);
 }
 
@@ -257,7 +257,7 @@ button:disabled {
   color: var(--chocolate);
   background: rgba(84, 226, 192, 0.12);
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .auth-hero h1,
@@ -291,7 +291,7 @@ button:disabled {
   margin: 0 auto;
   color: var(--ink);
   font-size: clamp(48px, 8vw, 104px);
-  font-weight: 600;
+  font-weight: 500;
   line-height: 0.9;
   letter-spacing: -0.085em;
 }
@@ -449,7 +449,7 @@ input:focus {
   margin: 0;
   color: #b42318;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .app-shell {
@@ -533,7 +533,7 @@ input:focus {
   gap: 30px;
   color: rgba(15, 13, 12, 0.58);
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .nav-links a:hover {
@@ -568,7 +568,7 @@ input:focus {
   color: #6b7280;
   background: transparent;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   outline: none;
   transition:
     color 180ms ease,
@@ -651,7 +651,7 @@ input:focus {
   color: #ffffff;
   background: var(--blueberry);
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .action-bar:not(:hover):not(:focus-within) .action-bar-badge {
@@ -766,7 +766,7 @@ input:focus {
   margin: 18px 0 0;
   color: #ffffff;
   font-family: Lora, Georgia, serif;
-  font-weight: 600;
+  font-weight: 500;
   font-size: clamp(58px, 7.2vw, 118px);
   line-height: 0.96;
   letter-spacing: -0.055em;
@@ -813,7 +813,7 @@ input:focus {
   padding: 0 28px;
   border-radius: 999px;
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .video-hero-actions .primary-button {
@@ -887,7 +887,7 @@ input:focus {
 }
 
 .home-shell .motivation-showcase {
-  width: min(980px, calc(100% - 48px));
+  width: min(900px, calc(100% - 48px));
 }
 
 .score-typewriter {
@@ -969,7 +969,7 @@ input:focus {
   color: #080d1a;
   font-family: Helvetica, Arial, ui-sans-serif, system-ui, sans-serif;
   font-size: clamp(42px, 4.6vw, 74px);
-  font-weight: 600;
+  font-weight: 500;
   line-height: 0.94;
   letter-spacing: -0.072em;
 }
@@ -1061,12 +1061,12 @@ input:focus {
   position: relative;
   z-index: 2;
   display: grid;
-  grid-template-columns: minmax(260px, 0.78fr) minmax(340px, 1.22fr);
-  gap: clamp(24px, 4vw, 52px);
+  grid-template-columns: minmax(236px, 0.72fr) minmax(330px, 1.28fr);
+  gap: clamp(20px, 3.4vw, 40px);
   align-items: center;
-  min-height: 460px;
-  margin: 0 auto 72px;
-  padding: clamp(32px, 4.5vw, 52px);
+  min-height: 392px;
+  margin: 0 auto 80px;
+  padding: clamp(28px, 4vw, 40px);
   overflow: hidden;
   border: 1px solid rgba(255, 145, 0, 0.22);
   border-radius: 28px;
@@ -1100,10 +1100,10 @@ input:focus {
   margin: 8px 0 18px;
   color: #080d1a;
   font-family: Helvetica, Arial, ui-sans-serif, system-ui, sans-serif;
-  font-size: clamp(44px, 4.4vw, 66px);
-  font-weight: 600;
-  line-height: 0.92;
-  letter-spacing: -0.072em;
+  font-size: clamp(38px, 3.8vw, 56px);
+  font-weight: 500;
+  line-height: 0.96;
+  letter-spacing: -0.06em;
 }
 
 .motivation-copy h2 span {
@@ -1116,10 +1116,10 @@ input:focus {
 }
 
 .motivation-copy p:not(.eyebrow) {
-  max-width: 540px;
+  max-width: 390px;
   color: #6b7280;
-  font-size: 17px;
-  line-height: 1.68;
+  font-size: 15px;
+  line-height: 1.62;
 }
 
 .motivation-actions {
@@ -1131,8 +1131,8 @@ input:focus {
 
 .motivation-actions .primary-button,
 .motivation-ghost {
-  min-height: 60px;
-  padding: 0 30px;
+  min-height: 50px;
+  padding: 0 22px;
   border-radius: 999px;
   display: inline-flex;
   align-items: center;
@@ -1146,16 +1146,16 @@ input:focus {
 }
 
 .battle-visual-card {
-  min-height: 340px;
+  min-height: 304px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.7);
-  border-radius: 28px;
+  border-radius: 24px;
   background:
-    radial-gradient(circle at 30% 20%, rgba(255, 145, 0, 0.32), transparent 32%),
-    radial-gradient(circle at 78% 70%, rgba(84, 226, 192, 0.3), transparent 34%),
-    linear-gradient(145deg, rgba(8, 13, 26, 0.92), rgba(27, 38, 56, 0.78));
+    radial-gradient(circle at 26% 16%, rgba(255, 145, 0, 0.24), transparent 30%),
+    radial-gradient(circle at 78% 72%, rgba(84, 226, 192, 0.24), transparent 34%),
+    linear-gradient(145deg, rgba(19, 28, 42, 0.9), rgba(48, 63, 75, 0.78));
   box-shadow:
-    0 34px 90px rgba(15, 23, 42, 0.28),
+    0 24px 64px rgba(15, 23, 42, 0.22),
     inset 0 1px 0 rgba(255, 255, 255, 0.22);
   transform: perspective(1100px) rotateY(-3deg) rotateX(1.5deg);
 }
@@ -1204,25 +1204,25 @@ input:focus {
 }
 
 .battle-topbar {
-  top: 18px;
-  left: 18px;
-  right: 18px;
+  top: 16px;
+  left: 16px;
+  right: 16px;
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 14px;
+  padding: 10px 12px;
   border-radius: 999px;
   color: #ffffff;
 }
 
 .battle-visual-heading {
   position: absolute;
-  top: 74px;
-  left: 28px;
+  top: 66px;
+  left: 24px;
   z-index: 2;
   color: #ffffff;
-  font-size: clamp(30px, 3.2vw, 46px);
-  font-weight: 600;
+  font-size: clamp(28px, 2.8vw, 40px);
+  font-weight: 500;
   line-height: 0.94;
   letter-spacing: -0.07em;
   text-shadow: 0 14px 36px rgba(0, 0, 0, 0.24);
@@ -1239,7 +1239,7 @@ input:focus {
   border-radius: 999px;
   color: #111827;
   background: #ffffff;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .battle-topbar strong {
@@ -1249,29 +1249,29 @@ input:focus {
 .battle-topbar em {
   color: rgba(255, 255, 255, 0.74);
   font-style: normal;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .battle-player-card {
-  width: min(230px, 44%);
+  width: min(190px, 44%);
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 14px;
-  border-radius: 22px;
+  padding: 11px;
+  border-radius: 18px;
   color: #ffffff;
   animation: battleFloat 6.6s ease-in-out infinite;
 }
 
 .battle-player-card span {
-  width: 46px;
-  height: 46px;
+  width: 38px;
+  height: 38px;
   display: grid;
   place-items: center;
   border-radius: 16px;
   color: #111827;
   background: #ffffff;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .battle-player-card strong,
@@ -1282,26 +1282,26 @@ input:focus {
 .battle-player-card em {
   color: #86efac;
   font-style: normal;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .player-one {
-  top: 146px;
-  left: 26px;
+  top: 134px;
+  left: 22px;
 }
 
 .player-two {
-  top: 116px;
-  right: 26px;
+  top: 108px;
+  right: 22px;
   animation-delay: -2.8s;
 }
 
 .battle-question-card {
   left: 50%;
   top: 55%;
-  width: min(270px, 70%);
-  padding: 18px;
-  border-radius: 24px;
+  width: min(240px, 68%);
+  padding: 15px;
+  border-radius: 20px;
   color: #ffffff;
   transform: translate(-50%, -48%);
 }
@@ -1312,13 +1312,13 @@ input:focus {
   text-transform: uppercase;
   letter-spacing: 0.12em;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .battle-question-card strong {
   display: block;
   margin-top: 6px;
-  font-size: 25px;
+  font-size: 22px;
   letter-spacing: -0.06em;
 }
 
@@ -1334,15 +1334,15 @@ input:focus {
   color: #111827;
   background: rgba(255, 255, 255, 0.88);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .battle-leaderboard {
-  right: 22px;
-  bottom: 20px;
-  width: min(250px, 58%);
-  padding: 14px;
-  border-radius: 22px;
+  right: 18px;
+  bottom: 18px;
+  width: min(226px, 58%);
+  padding: 12px;
+  border-radius: 18px;
   color: #ffffff;
 }
 
@@ -1363,7 +1363,7 @@ input:focus {
   align-items: center;
   gap: 8px;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .battle-leaderboard li span {
@@ -1426,7 +1426,7 @@ input:focus {
   border-radius: 50%;
   color: #ffffff;
   background: var(--friend-color);
-  font-weight: 600;
+  font-weight: 500;
   animation: friendFloat 4.8s ease-in-out infinite;
   animation-delay: var(--friend-delay);
 }
@@ -1513,7 +1513,7 @@ input:focus {
   background: rgba(255, 96, 0, 0.9);
   font-size: 11px;
   font-style: normal;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .meeting-grid {
@@ -1548,7 +1548,7 @@ input:focus {
   bottom: 12px;
   color: #ffffff;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   text-shadow: 0 6px 18px rgba(0, 0, 0, 0.32);
 }
 
@@ -1635,7 +1635,7 @@ input:focus {
   color: #6041b7;
   background: #f1edff;
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .feature-code-card h3 {
@@ -1825,7 +1825,7 @@ input:focus {
   margin: 0;
   color: #8992a3;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
@@ -1857,7 +1857,7 @@ input:focus {
 .metric span {
   color: #687386;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .metric strong {
@@ -1886,7 +1886,7 @@ input:focus {
 
 .module-card span {
   color: #687386;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .module-card strong {
@@ -1897,7 +1897,7 @@ input:focus {
 .progress-card small,
 .question-row small {
   color: #758194;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .module-card.active {
@@ -1933,7 +1933,7 @@ input:focus {
 .sidebar-title {
   gap: 8px;
   margin-bottom: 16px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .search-box {
@@ -1961,7 +1961,7 @@ input:focus {
   margin: 0 0 8px;
   color: #687386;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .filter-choice {
@@ -1972,7 +1972,7 @@ input:focus {
   border-radius: 8px;
   text-align: left;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
@@ -1994,7 +1994,7 @@ input:focus {
 .filter-choice small {
   color: #7b8596;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
   white-space: nowrap;
 }
 
@@ -2008,7 +2008,7 @@ input:focus {
 .icon-button {
   min-height: 38px;
   border-radius: 8px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .icon-button {
@@ -2054,7 +2054,7 @@ input:focus {
   background: #ffffff;
   box-shadow: 0 1px 0 rgba(11, 17, 32, 0.04);
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   transition:
     border-color 160ms ease,
     box-shadow 160ms ease,
@@ -2157,7 +2157,7 @@ input:focus {
   color: #ffffff;
   background: var(--blueberry);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
   text-transform: uppercase;
 }
 
@@ -2173,7 +2173,7 @@ input:focus {
   color: #4f5b6e;
   background: #f1f3f7;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .practice-panel h2 {
@@ -2212,7 +2212,7 @@ input:focus {
 .prompt-question {
   margin-top: 18px;
   color: #0b1120;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .choices {
@@ -2244,7 +2244,7 @@ input:focus {
   color: #4f5b6e;
   background: #eef1f6;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   flex: 0 0 auto;
 }
 
@@ -2275,7 +2275,7 @@ input:focus {
   border-radius: 14px;
   color: var(--blueberry);
   background: #ffffff;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .explanation-toggle:hover {
@@ -2377,7 +2377,7 @@ input:focus {
   margin: 0 0 4px;
   color: #7b8596;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .progress-card h3 {
@@ -2515,7 +2515,7 @@ input:focus {
   color: #586174;
   background: #ffffff;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .topic-back:hover {
@@ -2602,13 +2602,13 @@ input:focus {
 
 .bank-card h3 {
   font-size: 18px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .bank-card p {
   margin-top: 4px;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   opacity: 0.88;
 }
 
@@ -2631,7 +2631,7 @@ input:focus {
     inset 4px 4px 8px rgba(175, 230, 255, 0.5),
     inset -4px -4px 8px rgba(19, 95, 216, 0.35);
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   transition:
     background-position 0.8s ease,
     transform 0.28s ease;
@@ -2691,7 +2691,7 @@ input:focus {
   color: #596273;
   background: #ffffff;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .practice-all-card {
@@ -2718,7 +2718,7 @@ input:focus {
   margin-top: 4px;
   color: #8791a2;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .practice-all-card button {
@@ -2735,7 +2735,7 @@ input:focus {
     inset 4px 4px 8px rgba(175, 230, 255, 0.45),
     inset -4px -4px 8px rgba(19, 95, 216, 0.3);
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   transition:
     background-position 0.8s ease,
     transform 0.28s ease;
@@ -2762,7 +2762,7 @@ input:focus {
   border-bottom: 1px solid #e9edf3;
   color: #7a8494;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .topic-group {
@@ -2812,7 +2812,7 @@ input:focus {
 
 .topic-name strong {
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1.35;
 }
 
@@ -2841,7 +2841,7 @@ input:focus {
   color: #647084;
   font-size: 12px;
   font-style: normal;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .topic-accuracy {
@@ -2874,7 +2874,7 @@ input:focus {
   margin: 8px 0 0;
   color: var(--ink);
   font-size: clamp(38px, 6vw, 72px);
-  font-weight: 600;
+  font-weight: 500;
   line-height: 0.94;
   letter-spacing: -0.075em;
 }
@@ -2936,7 +2936,7 @@ input:focus {
   min-height: 28px;
   color: var(--ink);
   font-size: 20px;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: -0.05em;
   pointer-events: none;
 }
@@ -2974,14 +2974,14 @@ input:focus {
   display: block;
   color: var(--ink);
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .arena-invite-card p {
   margin: 3px 0 0;
   color: var(--muted);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .arena-invite-card input {
@@ -3014,7 +3014,7 @@ input:focus {
   margin-top: 10px;
   color: var(--bubble);
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .arena-scoreboard {
@@ -3027,7 +3027,7 @@ input:focus {
   margin: 0 0 12px;
   color: var(--ink);
   font-size: 20px;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: -0.05em;
 }
 
@@ -3053,19 +3053,19 @@ input:focus {
   color: #ffffff;
   background: var(--blueberry);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .arena-player-row strong {
   color: var(--ink);
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .arena-player-row em {
   color: var(--bubble);
   font-style: normal;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .arena-player-row i {
@@ -3097,7 +3097,7 @@ input:focus {
   min-width: 130px;
   color: var(--muted);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .arena-skill {
@@ -3108,7 +3108,7 @@ input:focus {
   color: var(--chocolate);
   background: #ffffff;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
   text-align: left;
 }
 
@@ -3129,7 +3129,7 @@ input:focus {
   margin-left: auto;
   color: var(--muted);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .arena-accordion {
@@ -3178,13 +3178,13 @@ input:focus {
   color: var(--blueberry);
   background: rgba(96, 65, 183, 0.09);
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 500;
   text-transform: uppercase;
 }
 
 .arena-accordion-trigger strong {
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: -0.04em;
 }
 
@@ -3192,7 +3192,7 @@ input:focus {
   color: var(--bubble);
   font-style: normal;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .arena-accordion-trigger svg {
@@ -3265,7 +3265,7 @@ input:focus {
   color: var(--blueberry);
   background: rgba(96, 65, 183, 0.08);
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .arena-choices {
@@ -3331,13 +3331,13 @@ input:focus {
   border: 1px solid var(--line);
   border-radius: 999px;
   color: var(--blueberry);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .arena-choices em,
 .arena-review-choice em {
   font-style: normal;
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1.45;
 }
 
@@ -3419,7 +3419,7 @@ input:focus {
   margin: 0;
   color: var(--chocolate);
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1.45;
 }
 
@@ -3485,7 +3485,7 @@ input:focus {
 
 .study-room-card strong {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: -0.05em;
 }
 
@@ -3519,7 +3519,7 @@ input:focus {
 .study-video-head span {
   color: var(--bubble);
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
   text-transform: uppercase;
 }
 
@@ -3569,7 +3569,7 @@ input:focus {
 .study-room-start strong {
   color: var(--ink);
   font-size: 22px;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: -0.05em;
 }
 
@@ -3615,14 +3615,14 @@ input:focus {
   display: block;
   color: var(--bubble);
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 500;
   text-transform: uppercase;
 }
 
 .study-dock header strong {
   color: var(--ink);
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .study-dock header div:last-child {
@@ -3638,7 +3638,7 @@ input:focus {
   color: var(--ink);
   background: #ffffff;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .study-dock iframe {
@@ -3673,7 +3673,7 @@ input:focus {
   margin: 0;
   color: var(--chocolate);
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1.45;
 }
 
@@ -3709,7 +3709,7 @@ input:focus {
   color: #ffffff;
   background: var(--bubble);
   font-size: 28px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .profile-panel h2 {
@@ -3743,14 +3743,14 @@ input:focus {
   display: block;
   color: var(--muted);
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 500;
   text-transform: uppercase;
 }
 
 .profile-stat-grid strong {
   color: var(--ink);
   font-size: 22px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .friends-panel {
@@ -3790,20 +3790,20 @@ input:focus {
 .friend-result strong,
 .chat-panel header strong {
   color: var(--ink);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .friend-result span {
   color: var(--muted);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .form-success {
   margin: 0;
   color: #13945f;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .friend-requests {
@@ -3823,7 +3823,7 @@ input:focus {
 .friend-requests > div > strong {
   color: var(--ink);
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .friend-request-row {
@@ -3839,14 +3839,14 @@ input:focus {
 
 .friend-request-row span {
   color: var(--ink);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .friend-request-row em {
   color: var(--muted);
   font-size: 12px;
   font-style: normal;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .friend-request-row.muted {
@@ -3892,19 +3892,19 @@ input:focus {
   border-radius: 12px;
   color: #ffffff;
   background: var(--blueberry);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .friend-list strong {
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .friend-list em {
   color: var(--muted);
   font-size: 11px;
   font-style: normal;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .chat-panel {
@@ -3959,7 +3959,7 @@ input:focus {
   color: var(--ink);
   background: #ffffff;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .chat-compose {
@@ -4001,7 +4001,7 @@ input:focus {
   margin: 14px 0 0;
   color: var(--bubble);
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .vocab-page {
@@ -4033,7 +4033,7 @@ input:focus {
   color: #64748b;
   background: transparent;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: -0.025em;
   transition:
     color 180ms ease,
@@ -4073,7 +4073,7 @@ input:focus {
   margin-bottom: 18px;
   color: #64748b;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: -0.02em;
 }
 
@@ -4364,7 +4364,7 @@ input:focus {
   color: #475569;
   background: #ffffff;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   transition:
     color 160ms ease,
     background 160ms ease,
@@ -4401,7 +4401,7 @@ input:focus {
 .vocab-page-ellipsis {
   color: #94a3b8;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .vocab-empty {
@@ -4425,7 +4425,7 @@ input:focus {
 .vocab-empty strong {
   color: var(--ink);
   font-size: 18px;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: -0.04em;
 }
 
@@ -4479,7 +4479,7 @@ input:focus {
   background: transparent;
   color: #5f6878;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .sat-back,
@@ -4523,7 +4523,7 @@ input:focus {
   background: #ffffff;
   color: #7c8595;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .sat-tools {
@@ -4635,7 +4635,7 @@ input:focus {
   border-radius: 8px;
   color: #ffffff;
   background: #020617;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .sat-review {
@@ -4656,7 +4656,7 @@ input:focus {
   margin: 22px 0 18px;
   color: #111827;
   font-size: 17px;
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1.6;
   white-space: pre-line;
 }
@@ -4693,7 +4693,7 @@ input:focus {
   background: #f1f2f4;
   color: #111827;
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .sat-free-response button {
@@ -4703,7 +4703,7 @@ input:focus {
   border-radius: 14px;
   color: #ffffff;
   background: var(--bubble);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .calculator-popover {
@@ -4744,7 +4744,7 @@ input:focus {
   color: #5f6878;
   background: #eef1f5;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .calculator-popover iframe {
@@ -4810,7 +4810,7 @@ input:focus {
 .sat-free-response.correct::after,
 .sat-free-response.wrong::after {
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .sat-free-response.correct::after {
@@ -4879,7 +4879,7 @@ input:focus {
   border-radius: 50%;
   background: #ffffff;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .sat-choice-main em {
@@ -4925,7 +4925,7 @@ input:focus {
   border-radius: 50%;
   background: #ffffff;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .choice-strike-button span::after {
@@ -5016,7 +5016,7 @@ input:focus {
 .question-bank-popover-header strong {
   color: #111827;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .question-bank-popover-header div {
@@ -5036,7 +5036,7 @@ input:focus {
   background: #f8fafc;
   color: #6b7280;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .question-bank-close {
@@ -5074,7 +5074,7 @@ input:focus {
   gap: 5px;
   color: #4b5563;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .legend-dot {
@@ -5128,7 +5128,7 @@ input:focus {
   color: #111827;
   background: #ffffff;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .question-bank-cell.easy { background: #d9fbe5; color: #138450; }
@@ -5189,7 +5189,7 @@ input:focus {
   background: #ffffff;
   color: #111827;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .sat-map-cell.correct {
@@ -5238,7 +5238,7 @@ input:focus {
   background: transparent;
   color: #596273;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .question-page-nav {
@@ -5267,7 +5267,7 @@ input:focus {
 .question-page-ellipsis {
   padding: 0 4px;
   color: #9aa3b2;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .sat-nav-button,
@@ -5392,11 +5392,11 @@ input:focus {
 
   .motivation-showcase {
     min-height: auto;
-    padding: 30px 22px;
+    padding: 28px 20px;
   }
 
   .battle-visual-card {
-    min-height: 430px;
+    min-height: 380px;
     transform: none;
   }
 
@@ -5476,5 +5476,6 @@ input:focus {
     grid-template-columns: 1fr;
   }
 }
+
 
 
