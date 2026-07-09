@@ -1026,7 +1026,12 @@ export default function App() {
           </section>
 
           <div className="landing-continuation">
-            <StudentResultsShowcase onPlayArena={() => setBankView("arena")} />
+            <StudentResultsShowcase onTryPractice={() => setBankView("bank")} />
+
+            <MotivationShowcase
+              onOpenStudy={() => setBankView("study")}
+              onPlayArena={() => setBankView("arena")}
+            />
 
             <FeatureCardsShowcase />
           </div>
@@ -1466,17 +1471,22 @@ function ScoreTypewriter({ scores }: { scores: string[] }) {
   );
 }
 
-function StudentResultsShowcase({ onPlayArena }: { onPlayArena: () => void }) {
+function StudentResultsShowcase({ onTryPractice }: { onTryPractice: () => void }) {
   const cards = Array.from({ length: 8 }, (_, index) => index);
 
   return (
     <section className="student-results-showcase" aria-label="Student SAT results">
       <div className="results-copy">
-        <p className="eyebrow">live battles</p>
-        <h2>Challenge your friends. Win together.</h2>
-        <p>Compete in real-time SAT quizzes. Play 1v1 duels or team battles, climb the leaderboard, and improve faster.</p>
-        <button className="primary-button results-play-button" onClick={onPlayArena}>
-          Play 1v1
+        <p className="eyebrow">student scores</p>
+        <h2>
+          Our users got:
+          <span>1500+ results</span>
+        </h2>
+        <p>
+          With <em>sat4.me</em>, focused practice turns into real score jumps.
+        </p>
+        <button className="primary-button results-play-button" onClick={onTryPractice}>
+          Try it and get 1500+
           <ChevronRight size={17} />
         </button>
       </div>
@@ -1497,6 +1507,67 @@ function StudentResultsShowcase({ onPlayArena }: { onPlayArena: () => void }) {
               <img src="/results/student-result.png" alt="SAT student result" />
             </figure>
           ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function MotivationShowcase({ onOpenStudy, onPlayArena }: { onOpenStudy: () => void; onPlayArena: () => void }) {
+  const dockFriends = [
+    { name: "A", color: "#54e2c0", delay: "0s" },
+    { name: "M", color: "#ff6000", delay: "-0.8s" },
+    { name: "S", color: "#6041b7", delay: "-1.5s" },
+    { name: "K", color: "#e94196", delay: "-2.2s" },
+  ];
+
+  return (
+    <section className="motivation-showcase" aria-label="Study with friends">
+      <div className="motivation-copy">
+        <p className="eyebrow">social study</p>
+        <h2>
+          Feeling overwhelmed while preparing?
+          <span>Find your <em>friends</em> &amp; <em>motivation</em> here.</span>
+        </h2>
+        <p>
+          Join camera-only study rooms, challenge classmates, and keep moving when SAT prep starts feeling too heavy.
+        </p>
+        <div className="motivation-actions">
+          <button className="primary-button" onClick={onOpenStudy}>
+            Study rooms
+            <Video size={17} />
+          </button>
+          <button className="hero-ghost-button motivation-ghost" onClick={onPlayArena}>
+            Play
+            <Trophy size={17} />
+          </button>
+        </div>
+        <div className="friend-dock-preview" aria-label="Friends dock preview">
+          <span className="friend-dock-sparkle">✦</span>
+          {dockFriends.map((friend) => (
+            <span
+              key={friend.name}
+              className="friend-dock-avatar"
+              style={{ "--friend-color": friend.color, "--friend-delay": friend.delay } as CSSProperties}
+            >
+              {friend.name}
+              <i />
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div className="meeting-video-card" aria-label="Live study room preview">
+        <div className="meeting-topbar">
+          <span />
+          <strong>Study Room 01</strong>
+          <em>LIVE</em>
+        </div>
+        <div className="meeting-grid">
+          <div className="meeting-tile main"><span>Camera on</span></div>
+          <div className="meeting-tile"><span>Math focus</span></div>
+          <div className="meeting-tile"><span>Verbal block</span></div>
+          <div className="meeting-tile"><span>Silent mode</span></div>
         </div>
       </div>
     </section>

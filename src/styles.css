@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,500;0,600;0,700;1,500;1,600;1,700&family=Montserrat:wght@400;500;600;700;800;900&display=swap");
 
 :root {
   --mint: #54e2c0;
@@ -7,6 +7,7 @@
   --cherry: #b6255b;
   --coconut: #2870c6;
   --chocolate: #67534e;
+  --sunset: #ff6000;
   --ink: #171717;
   --paper: #f4f4f3;
   --line: #ded8d5;
@@ -750,18 +751,20 @@ input:focus {
 .video-hero h1 {
   margin: 18px 0 0;
   color: #ffffff;
+  font-family: Lora, Georgia, serif;
+  font-weight: 700;
   font-size: clamp(58px, 7.2vw, 118px);
-  line-height: 0.92;
-  letter-spacing: -0.07em;
+  line-height: 0.96;
+  letter-spacing: -0.055em;
   text-shadow: 0 18px 55px rgba(0, 0, 0, 0.28);
 }
 
 .video-hero .score-line {
-  color: #05070d;
+  color: var(--sunset);
   font-style: italic;
   text-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.16),
-    0 20px 58px rgba(0, 0, 0, 0.28);
+    0 1px 0 rgba(255, 255, 255, 0.18),
+    0 18px 52px rgba(255, 96, 0, 0.3);
 }
 
 .video-hero .score-typewriter {
@@ -769,7 +772,7 @@ input:focus {
 }
 
 .video-hero .score-typewriter i {
-  color: rgba(5, 7, 13, 0.62);
+  color: rgba(255, 255, 255, 0.72);
 }
 
 .video-hero-content > p:not(.eyebrow) {
@@ -854,6 +857,7 @@ input:focus {
 }
 
 .home-shell .student-results-showcase,
+.home-shell .motivation-showcase,
 .home-shell .feature-showcase {
   position: relative;
   z-index: 2;
@@ -908,7 +912,7 @@ input:focus {
 .student-results-showcase {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(280px, 0.72fr) minmax(0, 1.28fr);
+  grid-template-columns: minmax(290px, 0.76fr) minmax(0, 1.24fr);
   gap: clamp(28px, 5vw, 72px);
   align-items: center;
   min-height: 430px;
@@ -944,9 +948,17 @@ input:focus {
 .results-copy h2 {
   margin: 8px 0 16px;
   color: #080d1a;
-  font-size: clamp(44px, 5vw, 82px);
-  line-height: 0.94;
-  letter-spacing: -0.08em;
+  font-family: Lora, Georgia, serif;
+  font-size: clamp(42px, 4.6vw, 74px);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.045em;
+}
+
+.results-copy h2 span {
+  display: block;
+  color: var(--sunset);
+  font-style: italic;
 }
 
 .results-copy p:not(.eyebrow) {
@@ -961,6 +973,9 @@ input:focus {
   align-items: center;
   gap: 10px;
   margin-top: 24px;
+  min-width: 230px;
+  min-height: 58px;
+  padding: 0 30px;
 }
 
 .results-carousel-wrapper {
@@ -1021,6 +1036,252 @@ input:focus {
   to {
     transform: perspective(var(--perspective)) rotateX(var(--rotateX)) rotateY(1turn);
   }
+}
+
+.motivation-showcase {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: minmax(300px, 0.9fr) minmax(320px, 1.1fr);
+  gap: clamp(28px, 5vw, 70px);
+  align-items: center;
+  min-height: 520px;
+  margin: 0 0 56px;
+  padding: clamp(38px, 6vw, 76px);
+  overflow: hidden;
+  border: 1px solid rgba(255, 145, 0, 0.22);
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 82% 20%, rgba(255, 145, 0, 0.18), transparent 30%),
+    radial-gradient(circle at 20% 85%, rgba(84, 226, 192, 0.2), transparent 34%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(255, 249, 240, 0.88));
+  box-shadow: 0 24px 70px rgba(255, 96, 0, 0.1);
+}
+
+.motivation-showcase::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(15, 23, 42, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 23, 42, 0.04) 1px, transparent 1px);
+  background-size: 54px 54px;
+  mask-image: linear-gradient(90deg, #000, transparent 82%);
+}
+
+.motivation-copy,
+.meeting-video-card {
+  position: relative;
+  z-index: 1;
+}
+
+.motivation-copy h2 {
+  margin: 8px 0 18px;
+  color: #080d1a;
+  font-family: Lora, Georgia, serif;
+  font-size: clamp(42px, 4.8vw, 78px);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.048em;
+}
+
+.motivation-copy h2 span {
+  display: block;
+}
+
+.motivation-copy h2 em {
+  color: var(--sunset);
+  font-style: italic;
+}
+
+.motivation-copy p:not(.eyebrow) {
+  max-width: 540px;
+  color: #6b7280;
+  font-size: 17px;
+  line-height: 1.68;
+}
+
+.motivation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 26px;
+}
+
+.motivation-actions .primary-button,
+.motivation-ghost {
+  min-height: 56px;
+  padding: 0 26px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.motivation-ghost {
+  color: #1f2937;
+  border-color: rgba(255, 96, 0, 0.28);
+  background: rgba(255, 255, 255, 0.54);
+}
+
+.friend-dock-preview {
+  width: fit-content;
+  margin-top: 28px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.84);
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.1);
+  backdrop-filter: blur(14px);
+}
+
+.friend-dock-sparkle {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #ffffff;
+  background: #080d1a;
+}
+
+.friend-dock-avatar {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #ffffff;
+  background: var(--friend-color);
+  font-weight: 900;
+  animation: friendFloat 4.8s ease-in-out infinite;
+  animation-delay: var(--friend-delay);
+}
+
+.friend-dock-avatar i {
+  position: absolute;
+  right: 1px;
+  bottom: 2px;
+  width: 10px;
+  height: 10px;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  background: #22c55e;
+}
+
+@keyframes friendFloat {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+
+  50% {
+    transform: translateY(-8px) scale(1.06);
+  }
+}
+
+.meeting-video-card {
+  min-height: 360px;
+  padding: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 28px;
+  background:
+    linear-gradient(145deg, rgba(8, 13, 26, 0.92), rgba(31, 41, 55, 0.78)),
+    radial-gradient(circle at 78% 20%, rgba(84, 226, 192, 0.28), transparent 34%);
+  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.24);
+  overflow: hidden;
+}
+
+.meeting-video-card::before {
+  content: "";
+  position: absolute;
+  inset: -30%;
+  background: linear-gradient(120deg, transparent 35%, rgba(255, 255, 255, 0.18), transparent 65%);
+  animation: meetingShine 7s ease-in-out infinite;
+}
+
+@keyframes meetingShine {
+  0% {
+    transform: translateX(-30%) rotate(8deg);
+  }
+
+  55%,
+  100% {
+    transform: translateX(44%) rotate(8deg);
+  }
+}
+
+.meeting-topbar {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  color: #ffffff;
+}
+
+.meeting-topbar span {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 0 6px rgba(34, 197, 94, 0.16);
+}
+
+.meeting-topbar strong {
+  margin-right: auto;
+}
+
+.meeting-topbar em {
+  padding: 5px 8px;
+  border-radius: 999px;
+  color: #ffffff;
+  background: rgba(255, 96, 0, 0.9);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.meeting-grid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 1.25fr 0.75fr;
+  grid-template-rows: repeat(3, 92px);
+  gap: 12px;
+}
+
+.meeting-tile {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 50% 28%, rgba(255, 255, 255, 0.4), transparent 16%),
+    linear-gradient(135deg, rgba(84, 226, 192, 0.45), rgba(96, 65, 183, 0.38));
+}
+
+.meeting-tile.main {
+  grid-row: span 3;
+  background:
+    radial-gradient(circle at 48% 30%, rgba(255, 255, 255, 0.48), transparent 14%),
+    linear-gradient(135deg, rgba(255, 96, 0, 0.52), rgba(84, 226, 192, 0.46));
+}
+
+.meeting-tile span {
+  position: absolute;
+  left: 14px;
+  bottom: 12px;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 800;
+  text-shadow: 0 6px 18px rgba(0, 0, 0, 0.32);
 }
 
 .feature-showcase {
@@ -4773,6 +5034,7 @@ input:focus {
   .arena-entry-grid,
   .arena-layout,
   .student-results-showcase,
+  .motivation-showcase,
   .feature-card-grid,
   .study-layout,
   .friends-layout,
@@ -4811,6 +5073,7 @@ input:focus {
 
   .landing-stats,
   .home-shell .student-results-showcase,
+  .home-shell .motivation-showcase,
   .home-shell .feature-showcase {
     width: calc(100% - 24px);
   }
@@ -4850,6 +5113,20 @@ input:focus {
     --w: 126px;
     --h: 176px;
     --translateZ: 290px;
+  }
+
+  .motivation-showcase {
+    min-height: auto;
+    padding: 30px 22px;
+  }
+
+  .meeting-grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: repeat(4, 86px);
+  }
+
+  .meeting-tile.main {
+    grid-row: span 1;
   }
 
   .sat-reading-pane {
