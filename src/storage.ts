@@ -151,6 +151,11 @@ export const loginUser = async (payload: LoginPayload) => {
   return data.user;
 };
 
+export const getUserProfile = async (userId: string) => {
+  const data = await getJson<{ user: UserProfile }>(`/api/users/me?userId=${encodeURIComponent(userId)}`);
+  return data.user;
+};
+
 export const awardUserElo = async (payload: { userId: string; delta: number }) => {
   const data = await requestJson<{ user: UserProfile }>("/api/users/elo", payload);
   return data.user;

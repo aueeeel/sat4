@@ -49,6 +49,7 @@ import {
   getFriendRequests,
   getFriends,
   getStoredUser,
+  getUserProfile,
   joinArenaRoom,
   loginUser,
   registerUser,
@@ -184,6 +185,9 @@ export default function App() {
   const [authError, setAuthError] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
   const [authPageOpen, setAuthPageOpen] = useState(false);
+  const [authMathScore, setAuthMathScore] = useState(730);
+  const [authRwScore, setAuthRwScore] = useState(720);
+  const [authGoalScore, setAuthGoalScore] = useState(1550);
   const [answersVersion, setAnswersVersion] = useState(0);
   const [activeSection, setActiveSection] = useState<Section>("Verbal");
   const [bankView, setBankView] = useState<"home" | "bank" | "topics" | "vocabulary" | "arena" | "study" | "friends">(() => {
@@ -210,7 +214,22 @@ export default function App() {
   const [calculatorFrame, setCalculatorFrame] = useState({ x: 920, y: 92, width: 430, height: 540 });
   const [practiceStartedAt, setPracticeStartedAt] = useState(Date.now());
   const [practiceTimerHidden, setPracticeTimerHidden] = useState(false);
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    getUserProfile(currentUser.id)
+      .then((user) => {
+        saveStoredUser(user);
+        setCurrentUser(user);
+      })
+      .catch(() => undefined);
+  }, [currentUser?.id]);
   const [currentTime, setCurrentTime] = useState(Date.now());
+  const authProjectedScore = authMathScore + authRwScore;
+  const authScoreDelta = authProjectedScore - 1450;
+  const authGoalGap = authGoalScore - authProjectedScore;
+  const authGoalStatus = authGoalGap <= 0 ? "Goal reached" : authGoalGap <= 80 ? "On track" : "Focus plan";
+  const authGoalFill = ((authGoalScore - 400) / 1200) * 100;
 
   const answers = useMemo(() => (currentUser ? getAnswers(currentUser.id) : []), [currentUser, answersVersion]);
   const currentQuestionIds = useMemo(() => new Set(questions.map((question) => question.id)), []);
@@ -587,24 +606,57 @@ export default function App() {
                 <div className="auth-goal-score">
                   <p>Your projected score</p>
                   <div>
-                    <strong>1520</strong>
+                    <strong>{authProjectedScore}</strong>
                     <span>/1600</span>
-                    <em>+70</em>
+                    <em>{authScoreDelta >= 0 ? "+" : ""}{authScoreDelta}</em>
                   </div>
                   <small>Predict your score, set your goal, and follow a focused plan to close the gap.</small>
+                </div>
+                <div className="auth-score-controls">
+                  <label>
+                    <span>Math <em>{authMathScore}/800</em></span>
+                    <input
+                      type="range"
+                      min="200"
+                      max="800"
+                      step="10"
+                      value={authMathScore}
+                      onChange={(event) => setAuthMathScore(Number(event.target.value))}
+                    />
+                  </label>
+                  <label>
+                    <span>Reading & Writing <em>{authRwScore}/800</em></span>
+                    <input
+                      type="range"
+                      min="200"
+                      max="800"
+                      step="10"
+                      value={authRwScore}
+                      onChange={(event) => setAuthRwScore(Number(event.target.value))}
+                    />
+                  </label>
                 </div>
                 <div className="auth-goal-setter">
                   <div className="auth-goal-setter-head">
                     <span>🎯 Set your goal score</span>
-                    <em>On track</em>
+                    <em>{authGoalStatus}</em>
                   </div>
                   <div className="auth-goal-target">
-                    <strong>1550</strong>
+                    <strong>{authGoalScore}</strong>
                     <span>/1600</span>
                   </div>
-                  <div className="auth-goal-slider" aria-hidden="true">
+                  <div className="auth-goal-slider">
                     <i />
-                    <b />
+                    <b style={{ width: `${authGoalFill}%` }} />
+                    <input
+                      aria-label="Goal SAT score"
+                      type="range"
+                      min="400"
+                      max="1600"
+                      step="10"
+                      value={authGoalScore}
+                      onChange={(event) => setAuthGoalScore(Number(event.target.value))}
+                    />
                   </div>
                   <div className="auth-goal-ticks">
                     <span>400</span>
@@ -612,26 +664,19 @@ export default function App() {
                     <span>1200</span>
                     <span>1600</span>
                   </div>
-                  <p>You need <strong>+30</strong> more points to reach your goal</p>
-                </div>
-                <div className="auth-goal-bars">
-                  <div><span>Math</span><em>790/800</em><i><b style={{ width: "98%" }} /></i></div>
-                  <div><span>Reading & Writing</span><em>730/800</em><i><b className="cyan" style={{ width: "91%" }} /></i></div>
-                  <div><span>Weak-area focus</span><em>Geometry · 12 drills left</em><i><b className="violet" style={{ width: "64%" }} /></i></div>
+                  <p>
+                    {authGoalGap > 0 ? (
+                      <>You need <strong>+{authGoalGap}</strong> more points to reach your goal</>
+                    ) : (
+                      <>You are <strong>{Math.abs(authGoalGap)}</strong> points above your goal</>
+                    )}
+                  </p>
                 </div>
               </section>
-            </div>
-            <div className="auth-page-proof">
-              <span>10,000+ questions</span>
-              <span>Math + Reading & Writing</span>
             </div>
           </section>
 
           <section className="auth-page-panel" aria-label={authMode === "sign-up" ? "Create account" : "Sign in"}>
-            <div className="auth-page-tabs" role="tablist" aria-label="Account type">
-              <button className="active" type="button">Студент</button>
-              <button type="button">Учитель / учебный центр</button>
-            </div>
             <div className="auth-page-copy">
               <button className="auth-page-back" type="button" onClick={() => setAuthPageOpen(false)}>
                 <ChevronLeft size={16} />
@@ -1064,7 +1109,10 @@ export default function App() {
         />
         <button className="profile-button" onClick={signOut} title="Sign out">
           <UserRound size={18} />
-          <span>{currentUser.name}</span>
+          <span>
+            {currentUser.name}
+            {currentUser.publicId && <small>ID {currentUser.publicId}</small>}
+          </span>
           <DoorOpen size={16} />
         </button>
       </nav>
@@ -2539,26 +2587,36 @@ function FriendsView({
   const addFoundFriend = async () => {
     if (!friendResult) return;
     setFriendsError("");
-    const result = await addFriend({ userId: currentUser.id, friendId: friendResult.id });
-    setFriends(result.friends);
-    setFriendRequests(result.requests);
-    if (result.status === "accepted" || result.status === "friends") {
-      setActiveFriendId(friendResult.id);
-      setFriendsStatus("Friend added. You can chat now.");
-    } else {
-      setFriendsStatus("Friend request sent. They will see it in Friends.");
+    setFriendsStatus("");
+    try {
+      const result = await addFriend({ userId: currentUser.id, friendId: friendResult.id });
+      setFriends(result.friends);
+      setFriendRequests(result.requests);
+      if (result.status === "accepted" || result.status === "friends") {
+        setActiveFriendId(friendResult.id);
+        setFriendsStatus("Friend added. You can chat now.");
+      } else {
+        setFriendsStatus("Friend request sent. They will see it in Friends.");
+      }
+      setFriendResult(null);
+      setFriendQuery("");
+    } catch (error) {
+      setFriendsError(error instanceof Error ? error.message : "Could not send friend request.");
     }
-    setFriendResult(null);
-    setFriendQuery("");
   };
 
   const acceptRequest = async (requestId: string, friendId: string) => {
     setFriendsError("");
-    const result = await acceptFriendRequest({ userId: currentUser.id, requestId });
-    setFriends(result.friends);
-    setFriendRequests(result.requests);
-    setActiveFriendId(friendId);
-    setFriendsStatus("Friend request accepted.");
+    setFriendsStatus("");
+    try {
+      const result = await acceptFriendRequest({ userId: currentUser.id, requestId });
+      setFriends(result.friends);
+      setFriendRequests(result.requests);
+      setActiveFriendId(friendId);
+      setFriendsStatus("Friend request accepted.");
+    } catch (error) {
+      setFriendsError(error instanceof Error ? error.message : "Could not accept friend request.");
+    }
   };
 
   const sendMessage = async () => {
@@ -2575,16 +2633,22 @@ function FriendsView({
   return (
     <section className="friends-page">
       <div className="friends-hero">
-        <p className="eyebrow">Friends</p>
-        <h1>Your SAT circle.</h1>
-        <p>Add friends, message them, and send practice tasks straight from the question bank.</p>
+        <div>
+          <p className="eyebrow">Friends</p>
+          <h1>Your SAT circle.</h1>
+          <p>Add friends, message them, and send practice tasks straight from the question bank.</p>
+        </div>
+        <div className="friend-id-card">
+          <span>Your ID</span>
+          <strong>{currentUser.publicId ?? "------"}</strong>
+        </div>
       </div>
 
       <div className="friends-layout">
         <aside className="profile-panel">
           <div className="profile-avatar">{currentUser.nickname.slice(0, 1).toUpperCase()}</div>
           <h2>{currentUser.nickname}</h2>
-          <p>ID: {currentUser.id}</p>
+          <p>ID: {currentUser.publicId ?? "refreshing..."}</p>
           <div className="profile-stat-grid">
             <div><span>ELO</span><strong>{currentUser.elo ?? 400}</strong></div>
             <div><span>Accuracy</span><strong>{totalAccuracy}%</strong></div>
@@ -2594,13 +2658,15 @@ function FriendsView({
 
         <section className="friends-panel">
           <div className="friend-search">
-            <input value={friendQuery} onChange={(event) => setFriendQuery(event.target.value)} placeholder="Nickname or user ID" />
+            <input value={friendQuery} onChange={(event) => setFriendQuery(event.target.value)} placeholder="Nickname or 6-digit ID" />
             <button className="primary-button" onClick={findFriend}><UserPlus size={16} /> Find</button>
           </div>
           {friendResult && (
             <div className="friend-result">
-              <strong>{friendResult.nickname}</strong>
-              <span>ELO {friendResult.elo ?? 400}</span>
+              <div>
+                <strong>{friendResult.nickname}</strong>
+                <span>ID {friendResult.publicId ?? "------"} · ELO {friendResult.elo ?? 400}</span>
+              </div>
               <button className="ghost-button" onClick={addFoundFriend}>Add friend</button>
             </div>
           )}
@@ -2613,7 +2679,7 @@ function FriendsView({
                   <strong>Incoming requests</strong>
                   {incomingRequests.map((request) => (
                     <div key={request.id} className="friend-request-row">
-                      <span>{request.user.nickname}</span>
+                      <span>{request.user.nickname}<small>ID {request.user.publicId ?? "------"}</small></span>
                       <button className="ghost-button" onClick={() => acceptRequest(request.id, request.user.id)}>Accept</button>
                     </div>
                   ))}
@@ -2624,7 +2690,7 @@ function FriendsView({
                   <strong>Sent requests</strong>
                   {outgoingRequests.map((request) => (
                     <div key={request.id} className="friend-request-row muted">
-                      <span>{request.user.nickname}</span>
+                      <span>{request.user.nickname}<small>ID {request.user.publicId ?? "------"}</small></span>
                       <em>Waiting</em>
                     </div>
                   ))}
@@ -2639,7 +2705,7 @@ function FriendsView({
                 <button key={friend.id} className={activeFriend?.id === friend.id ? "active" : ""} onClick={() => setActiveFriendId(friend.id)}>
                   <span>{friend.nickname.slice(0, 1).toUpperCase()}</span>
                   <strong>{friend.nickname}</strong>
-                  <em>{friend.elo ?? 400} ELO</em>
+                  <em>ID {friend.publicId ?? "------"} · {friend.elo ?? 400} ELO</em>
                 </button>
               )) : <p>Add a friend to start chatting.</p>}
             </div>

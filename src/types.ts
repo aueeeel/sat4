@@ -28,6 +28,7 @@ export type AnswerRecord = {
 
 export type UserProfile = {
   id: string;
+  publicId?: string;
   fullName: string;
   nickname: string;
   age: number;

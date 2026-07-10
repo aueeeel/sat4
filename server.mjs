@@ -36,6 +36,7 @@ const questionById = new Map(questionBank.map((question) => [question.id, questi
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
+    public_id TEXT UNIQUE,
     full_name TEXT NOT NULL,
     nickname TEXT NOT NULL,
     age INTEGER NOT NULL,
@@ -125,6 +126,7 @@ try {
 }
 
 for (const migration of [
+  `ALTER TABLE users ADD COLUMN public_id TEXT;`,
   `ALTER TABLE users ADD COLUMN elo INTEGER NOT NULL DEFAULT 400;`,
   `ALTER TABLE arena_rooms ADD COLUMN elo_awarded INTEGER NOT NULL DEFAULT 0;`,
   `ALTER TABLE arena_answers ADD COLUMN selected_index INTEGER;`,
@@ -137,6 +139,27 @@ for (const migration of [
     // Existing databases already have this column.
   }
 }
+
+db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS users_public_id_idx ON users(public_id);`);
+
+const createPublicId = () => {
+  const findExistingPublicId = db.prepare("SELECT id FROM users WHERE public_id = ?");
+  let publicId = String(Math.floor(100000 + Math.random() * 900000));
+  while (findExistingPublicId.get(publicId)) {
+    publicId = String(Math.floor(100000 + Math.random() * 900000));
+  }
+  return publicId;
+};
+
+const backfillPublicIds = () => {
+  const usersWithoutPublicId = db.prepare("SELECT id FROM users WHERE public_id IS NULL OR public_id = ''").all();
+  const updatePublicId = db.prepare("UPDATE users SET public_id = ? WHERE id = ?");
+  for (const user of usersWithoutPublicId) {
+    updatePublicId.run(createPublicId(), user.id);
+  }
+};
+
+backfillPublicIds();
 
 const json = (response, status, payload) => {
   response.writeHead(status, {
@@ -229,6 +252,7 @@ const verifyPassword = (password, hash, salt) => {
 
 const publicUser = (row) => ({
   id: row.id,
+  publicId: row.public_id,
   fullName: row.full_name,
   nickname: row.nickname,
   age: row.age,
@@ -248,6 +272,7 @@ const publicFriendRequest = (row, currentUserId) => ({
   createdAt: row.created_at,
   user: publicUser({
     id: row.sender_id === currentUserId ? row.receiver_id : row.sender_id,
+    public_id: row.public_id,
     full_name: row.full_name,
     nickname: row.nickname,
     age: row.age,
@@ -268,10 +293,11 @@ const validateRegistration = ({ fullName, nickname, age, gmail, password }) => {
 
 const findUserByGmail = db.prepare("SELECT * FROM users WHERE gmail = ?");
 const findUserById = db.prepare("SELECT * FROM users WHERE id = ?");
+const findUserByPublicId = db.prepare("SELECT * FROM users WHERE public_id = ?");
 const findUserByNickname = db.prepare("SELECT * FROM users WHERE lower(nickname) = lower(?)");
 const insertUser = db.prepare(`
-  INSERT INTO users (id, full_name, nickname, age, gmail, password_hash, password_salt, elo, joined_at)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  INSERT INTO users (id, public_id, full_name, nickname, age, gmail, password_hash, password_salt, elo, joined_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 const updateUserElo = db.prepare("UPDATE users SET elo = max(0, elo + ?) WHERE id = ?");
 const getFriendship = db.prepare("SELECT * FROM friendships WHERE user_a = ? AND user_b = ?");
@@ -294,7 +320,7 @@ const acceptFriendRequest = db.prepare(`
   WHERE id = ? AND receiver_id = ? AND status = 'pending'
 `);
 const getFriendRequests = db.prepare(`
-  SELECT friend_requests.*, users.nickname, users.full_name, users.age, users.gmail, users.elo, users.joined_at
+  SELECT friend_requests.*, users.public_id, users.nickname, users.full_name, users.age, users.gmail, users.elo, users.joined_at
   FROM friend_requests
   JOIN users ON users.id = CASE
     WHEN friend_requests.sender_id = ? THEN friend_requests.receiver_id
@@ -517,11 +543,13 @@ const server = createServer(async (request, response) => {
 
       const { hash, salt } = createPasswordRecord(password);
       const id = randomUUID();
+      const publicId = createPublicId();
       const joinedAt = new Date().toISOString();
-      insertUser.run(id, fullName, nickname, age, gmail, hash, salt, 400, joinedAt);
+      insertUser.run(id, publicId, fullName, nickname, age, gmail, hash, salt, 400, joinedAt);
       json(response, 201, {
         user: publicUser({
           id,
+          public_id: publicId,
           full_name: fullName,
           nickname,
           age,
@@ -549,6 +577,17 @@ const server = createServer(async (request, response) => {
         return;
       }
 
+      json(response, 200, { user: publicUser(user) });
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/users/me") {
+      const userId = String(url.searchParams.get("userId") ?? "");
+      const user = findUserById.get(userId);
+      if (!user) {
+        json(response, 404, { error: "User not found." });
+        return;
+      }
       json(response, 200, { user: publicUser(user) });
       return;
     }
@@ -588,7 +627,7 @@ const server = createServer(async (request, response) => {
     if (request.method === "GET" && url.pathname === "/api/friends/search") {
       const query = String(url.searchParams.get("q") ?? "").trim();
       const userId = String(url.searchParams.get("userId") ?? "");
-      const user = query ? (findUserById.get(query) ?? findUserByNickname.get(query)) : null;
+      const user = query ? (findUserByPublicId.get(query) ?? findUserById.get(query) ?? findUserByNickname.get(query)) : null;
       if (!user || user.id === userId) {
         json(response, 404, { error: "User not found." });
         return;
