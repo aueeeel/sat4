@@ -179,6 +179,58 @@ const splitPrompt = (prompt: string) => {
   };
 };
 
+type PracticePaperModule = {
+  id: string;
+  label: string;
+  section: Section;
+  moduleNumber: 1 | 2;
+  durationMinutes: number;
+  questions: Question[];
+};
+
+type PracticePaper = {
+  id: string;
+  title: string;
+  dateLabel: string;
+  sourceLabel: string;
+  modules: PracticePaperModule[];
+};
+
+const createPracticePaperModule = (
+  id: string,
+  label: string,
+  section: Section,
+  moduleNumber: 1 | 2,
+  durationMinutes: number,
+  count: number,
+  offset = 0
+): PracticePaperModule => {
+  const pool = questions.filter((question) => question.section === section);
+  return {
+    id,
+    label,
+    section,
+    moduleNumber,
+    durationMinutes,
+    questions: pool.slice(offset, offset + count),
+  };
+};
+
+const practicePapers: PracticePaper[] = [
+  {
+    id: "dec-2024-int-1",
+    title: "DSAT December 2024 International 1",
+    dateLabel: "December 2024",
+    sourceLabel: "Reading & Writing paper uploaded",
+    modules: [
+      createPracticePaperModule("dec-2024-rw-m1", "Reading and Writing · Module 1", "Verbal", 1, 32, 27, 0),
+      createPracticePaperModule("dec-2024-rw-m2", "Reading and Writing · Module 2", "Verbal", 2, 32, 27, 27),
+      createPracticePaperModule("dec-2024-math-m1", "Math · Module 1", "Math", 1, 35, 22, 0),
+      createPracticePaperModule("dec-2024-math-m2", "Math · Module 2", "Math", 2, 35, 22, 22),
+    ],
+  },
+];
+
 export default function App() {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => getStoredUser());
   const [authMode, setAuthMode] = useState<"sign-in" | "sign-up">("sign-up");
@@ -190,7 +242,7 @@ export default function App() {
   const [authGoalScore, setAuthGoalScore] = useState(1550);
   const [answersVersion, setAnswersVersion] = useState(0);
   const [activeSection, setActiveSection] = useState<Section>("Verbal");
-  const [bankView, setBankView] = useState<"home" | "bank" | "topics" | "vocabulary" | "arena" | "study" | "friends">(() => {
+  const [bankView, setBankView] = useState<"home" | "bank" | "topics" | "papers" | "vocabulary" | "arena" | "study" | "friends">(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get("arena") ? "arena" : "home";
   });
@@ -1076,6 +1128,16 @@ export default function App() {
               },
             },
             {
+              id: "papers",
+              label: "Practice Papers",
+              icon: <FileText size={17} />,
+              active: bankView === "papers",
+              onClick: () => {
+                setBankView("papers");
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              },
+            },
+            {
               id: "arena",
               label: "Arena",
               icon: <Trophy size={17} />,
@@ -1146,6 +1208,8 @@ export default function App() {
         />
       ) : bankView === "vocabulary" ? (
         <VocabularyView />
+      ) : bankView === "papers" ? (
+        <PracticePapersView />
       ) : bankView === "home" ? (
         <>
           <section id="dashboard" className="video-hero">
@@ -1938,6 +2002,245 @@ function QuestionBankNavigator({
         </section>
       )}
     </div>
+  );
+}
+
+function PracticePapersView() {
+  const [activePaperId, setActivePaperId] = useState(practicePapers[0]?.id ?? "");
+  const [activeModuleIndex, setActiveModuleIndex] = useState<number | null>(null);
+  const [activeQuestionIndex, setActiveQuestionIndex] = useState(0);
+  const [reviewMode, setReviewMode] = useState(false);
+  const [paperStartedAt, setPaperStartedAt] = useState(Date.now());
+  const [timerHidden, setTimerHidden] = useState(false);
+  const [now, setNow] = useState(Date.now());
+  const [paperAnswers, setPaperAnswers] = useState<Record<string, number>>({});
+  const [markedForReview, setMarkedForReview] = useState<Record<string, boolean>>({});
+
+  const activePaper = practicePapers.find((paper) => paper.id === activePaperId) ?? practicePapers[0];
+  const activeModule = activeModuleIndex === null ? null : activePaper?.modules[activeModuleIndex] ?? null;
+  const activeQuestion = activeModule?.questions[activeQuestionIndex] ?? null;
+  const activePrompt = activeQuestion ? splitPrompt(activeQuestion.prompt) : null;
+  const elapsedSeconds = Math.max(0, Math.floor((now - paperStartedAt) / 1000));
+  const remainingSeconds = activeModule ? Math.max(0, activeModule.durationMinutes * 60 - elapsedSeconds) : 0;
+
+  useEffect(() => {
+    if (activeModuleIndex === null) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [activeModuleIndex]);
+
+  if (!activePaper) {
+    return (
+      <section className="practice-papers-page">
+        <p className="eyebrow">Practice Papers</p>
+        <h1>No papers yet.</h1>
+      </section>
+    );
+  }
+
+  const startModule = (moduleIndex = 0) => {
+    setActiveModuleIndex(moduleIndex);
+    setActiveQuestionIndex(0);
+    setReviewMode(false);
+    setTimerHidden(false);
+    setPaperStartedAt(Date.now());
+    setNow(Date.now());
+  };
+
+  const finishModule = () => {
+    setReviewMode(true);
+  };
+
+  const goToNextModule = () => {
+    if (activeModuleIndex === null) return;
+    const nextIndex = activeModuleIndex + 1;
+    if (!activePaper.modules[nextIndex]) {
+      setActiveModuleIndex(null);
+      setReviewMode(false);
+      return;
+    }
+    startModule(nextIndex);
+  };
+
+  if (activeModule && activeQuestion && activePrompt) {
+    const questionAnswer = paperAnswers[activeQuestion.id];
+    const questionMarked = Boolean(markedForReview[activeQuestion.id]);
+
+    if (reviewMode) {
+      return (
+        <main className="paper-exam-shell">
+          <header className="paper-exam-topbar">
+            <button className="paper-directions">Directions <ChevronRight size={13} /></button>
+            <div className="paper-timer">
+              <strong>{timerHidden ? "--:--" : formatTimer(remainingSeconds)}</strong>
+              <button onClick={() => setTimerHidden((hidden) => !hidden)}>{timerHidden ? "Show" : "Hide"}</button>
+            </div>
+            <div className="paper-tools">
+              <button><Highlighter size={17} /> Highlight</button>
+              <button><MoreHorizontal size={17} /> More</button>
+            </div>
+          </header>
+          <section className="paper-review-screen">
+            <h1>Check Your Work</h1>
+            <p>
+              On test day, you won't be able to move on to the next module until time expires.
+              <br />
+              For these practice questions, you can click <strong>Next</strong> when you're ready to move on.
+            </p>
+            <article className="paper-review-card">
+              <header>
+                <strong>
+                  Section {activeModule.section === "Verbal" ? 1 : 2}, Module {activeModule.moduleNumber}: {sectionLabel(activeModule.section)}
+                </strong>
+                <span><i /> Unanswered</span>
+                <span><Bookmark size={14} fill="#ff3b30" color="#ff3b30" /> For Review</span>
+              </header>
+              <div className="paper-review-grid">
+                {activeModule.questions.map((question, index) => (
+                  <button
+                    key={question.id}
+                    className={[
+                      paperAnswers[question.id] === undefined ? "unanswered" : "",
+                      markedForReview[question.id] ? "marked" : "",
+                    ].join(" ")}
+                    onClick={() => {
+                      setActiveQuestionIndex(index);
+                      setReviewMode(false);
+                    }}
+                  >
+                    {index + 1}
+                    {markedForReview[question.id] && <Bookmark size={10} fill="#ff3b30" color="#ff3b30" />}
+                  </button>
+                ))}
+              </div>
+            </article>
+          </section>
+          <footer className="paper-exam-footer">
+            <button className="paper-count">{activeModule.questions.length} of {activeModule.questions.length}</button>
+            <div>
+              <button className="paper-soft-button" onClick={() => setReviewMode(false)}>Back</button>
+              <button className="paper-soft-button primary" onClick={goToNextModule}>Next</button>
+            </div>
+          </footer>
+        </main>
+      );
+    }
+
+    return (
+      <main className="paper-exam-shell">
+        <header className="paper-exam-topbar">
+          <button className="paper-directions">Directions <ChevronRight size={13} /></button>
+          <div className="paper-timer">
+            <strong>{timerHidden ? "--:--" : formatTimer(remainingSeconds)}</strong>
+            <button onClick={() => setTimerHidden((hidden) => !hidden)}>{timerHidden ? "Show" : "Hide"}</button>
+          </div>
+          <div className="paper-tools">
+            <button><Highlighter size={17} /> Highlight</button>
+            <button><MoreHorizontal size={17} /> More</button>
+          </div>
+        </header>
+
+        <section className={activeModule.section === "Math" ? "paper-stage paper-stage-math" : "paper-stage"}>
+          {activePrompt.passage && <article className="paper-passage">{activePrompt.passage}</article>}
+          <article className="paper-question-panel">
+            <header className="paper-question-header">
+              <span>{activeQuestionIndex + 1}</span>
+              <button
+                onClick={() =>
+                  setMarkedForReview((current) => ({
+                    ...current,
+                    [activeQuestion.id]: !current[activeQuestion.id],
+                  }))
+                }
+              >
+                <Bookmark size={15} fill={questionMarked ? "#111827" : "none"} />
+                Mark for Review
+              </button>
+              <em><FileQuestion size={15} /> Report</em>
+            </header>
+            <p className="paper-question-text">{activePrompt.questionText}</p>
+            <div className="paper-choice-list">
+              {activeQuestion.choices.map((choice, index) => (
+                <button
+                  key={`${activeQuestion.id}-${index}`}
+                  className={questionAnswer === index ? "selected" : ""}
+                  onClick={() => setPaperAnswers((current) => ({ ...current, [activeQuestion.id]: index }))}
+                >
+                  <span>{String.fromCharCode(65 + index)}</span>
+                  <strong>{choice.replace(/^[A-D]\.\s*/, "")}</strong>
+                </button>
+              ))}
+            </div>
+          </article>
+        </section>
+
+        <footer className="paper-exam-footer">
+          <button className="paper-count">{activeQuestionIndex + 1} of {activeModule.questions.length} <ChevronRight size={13} /></button>
+          <div>
+            <button
+              className="paper-soft-button"
+              disabled={activeQuestionIndex === 0}
+              onClick={() => setActiveQuestionIndex((index) => Math.max(0, index - 1))}
+            >
+              Previous
+            </button>
+            <button
+              className="paper-soft-button primary"
+              onClick={() => {
+                if (activeQuestionIndex >= activeModule.questions.length - 1) finishModule();
+                else setActiveQuestionIndex((index) => index + 1);
+              }}
+            >
+              Next
+            </button>
+          </div>
+        </footer>
+      </main>
+    );
+  }
+
+  return (
+    <section className="practice-papers-page">
+      <div className="practice-papers-hero">
+        <p className="eyebrow">Practice Papers</p>
+        <h1>Past papers, real exam feel.</h1>
+        <p>Choose a paper by date, then practice modules in a clean DSAT-style test screen.</p>
+      </div>
+      <div className="practice-paper-grid">
+        {practicePapers.map((paper) => {
+          const selected = paper.id === activePaperId;
+          const totalQuestions = paper.modules.reduce((sum, module) => sum + module.questions.length, 0);
+          return (
+            <article key={paper.id} className={selected ? "practice-paper-card active" : "practice-paper-card"}>
+              <div>
+                <span><FileText size={17} /> {paper.dateLabel}</span>
+                <h2>{paper.title}</h2>
+                <p>{paper.sourceLabel} · {totalQuestions} clean text questions</p>
+              </div>
+              <button
+                className="primary-button"
+                onClick={() => {
+                  setActivePaperId(paper.id);
+                  startModule(0);
+                }}
+              >
+                Start paper
+                <ChevronRight size={16} />
+              </button>
+            </article>
+          );
+        })}
+      </div>
+      <div className="practice-module-grid">
+        {activePaper.modules.map((module, index) => (
+          <button key={module.id} onClick={() => startModule(index)}>
+            <Clock3 size={17} />
+            <span>{module.label}</span>
+            <strong>{module.questions.length} questions · {module.durationMinutes}:00</strong>
+          </button>
+        ))}
+      </div>
+    </section>
   );
 }
 
