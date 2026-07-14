@@ -196,39 +196,229 @@ type PracticePaper = {
   modules: PracticePaperModule[];
 };
 
-const createPracticePaperModule = (
+type QuestionPickRequest = {
+  domain?: string;
+  skill?: string;
+  difficulty?: Difficulty | Difficulty[];
+  responseType?: "mc" | "free";
+};
+
+const difficultyRank: Record<Difficulty, number> = { Easy: 0, Medium: 1, Hard: 2 };
+const stableQuestionRank = (question: Question) =>
+  question.id.split("").reduce((hash, char) => ((hash << 5) - hash + char.charCodeAt(0)) | 0, 0);
+
+const isFreeResponseQuestion = (question: Question) => question.choices.length <= 1;
+
+const pickQuestions = (
+  section: Section,
+  requests: QuestionPickRequest[],
+  usedIds: Set<string>,
+  fallbackPool = questions
+) => {
+  const picked: Question[] = [];
+  const sectionPool = fallbackPool
+    .filter((question) => question.section === section)
+    .sort((first, second) => stableQuestionRank(first) - stableQuestionRank(second));
+
+  const matchesRequest = (question: Question, request: QuestionPickRequest, strict = true) => {
+    const wantedDifficulty = Array.isArray(request.difficulty) ? request.difficulty : request.difficulty ? [request.difficulty] : [];
+    const responseMatches =
+      !request.responseType ||
+      (request.responseType === "free" ? isFreeResponseQuestion(question) : !isFreeResponseQuestion(question));
+    const difficultyMatches = !wantedDifficulty.length || wantedDifficulty.includes(question.difficulty);
+    return (
+      (!strict || !request.domain || question.domain === request.domain) &&
+      (!strict || !request.skill || question.skill === request.skill) &&
+      difficultyMatches &&
+      responseMatches
+    );
+  };
+
+  requests.forEach((request) => {
+    const strictMatch = sectionPool.find((question) => !usedIds.has(question.id) && matchesRequest(question, request, true));
+    const relaxedSkillMatch =
+      strictMatch ??
+      sectionPool.find(
+        (question) =>
+          !usedIds.has(question.id) &&
+          (!request.domain || question.domain === request.domain) &&
+          (!request.responseType ||
+            (request.responseType === "free" ? isFreeResponseQuestion(question) : !isFreeResponseQuestion(question))) &&
+          (!request.difficulty ||
+            (Array.isArray(request.difficulty)
+              ? request.difficulty.includes(question.difficulty)
+              : request.difficulty === question.difficulty))
+      );
+    const relaxedDifficultyMatch =
+      relaxedSkillMatch ??
+      sectionPool
+        .filter((question) => !usedIds.has(question.id) && matchesRequest(question, { ...request, difficulty: undefined }, true))
+        .sort((first, second) => difficultyRank[first.difficulty] - difficultyRank[second.difficulty])[0];
+    const anySectionMatch =
+      relaxedDifficultyMatch ??
+      sectionPool.find(
+        (question) =>
+          !usedIds.has(question.id) &&
+          (!request.responseType ||
+            (request.responseType === "free" ? isFreeResponseQuestion(question) : !isFreeResponseQuestion(question)))
+      );
+
+    if (!anySectionMatch) return;
+    usedIds.add(anySectionMatch.id);
+    picked.push(anySectionMatch);
+  });
+
+  return picked;
+};
+
+const repeatRequests = (request: QuestionPickRequest, count: number) => Array.from({ length: count }, () => request);
+
+const createReadingWritingModule = (
   id: string,
   label: string,
-  section: Section,
   moduleNumber: 1 | 2,
-  durationMinutes: number,
-  count: number,
-  offset = 0
+  usedIds: Set<string>
 ): PracticePaperModule => {
-  const pool = questions.filter((question) => question.section === section);
+  const easyMedium: Difficulty[] = moduleNumber === 1 ? ["Easy", "Medium"] : ["Medium", "Hard"];
+  const mediumHard: Difficulty[] = moduleNumber === 1 ? ["Medium", "Easy"] : ["Medium", "Hard"];
+  const hardBlend: Difficulty[] = moduleNumber === 1 ? ["Medium", "Hard"] : ["Hard", "Medium"];
+  const blueprint: QuestionPickRequest[] = [
+    ...repeatRequests({ skill: "Words in Context", difficulty: easyMedium, responseType: "mc" }, moduleNumber === 1 ? 4 : 3),
+    ...repeatRequests({ skill: "Text Structure and Purpose", difficulty: mediumHard, responseType: "mc" }, 2),
+    ...repeatRequests({ skill: "Cross-Text Connections", difficulty: mediumHard, responseType: "mc" }, moduleNumber === 1 ? 1 : 2),
+    ...repeatRequests({ skill: "Central Ideas and Details", difficulty: easyMedium, responseType: "mc" }, moduleNumber === 1 ? 4 : 3),
+    ...repeatRequests({ skill: "Command of Evidence", difficulty: mediumHard, responseType: "mc" }, moduleNumber === 1 ? 3 : 4),
+    ...repeatRequests({ skill: "Inferences", difficulty: hardBlend, responseType: "mc" }, 3),
+    ...repeatRequests({ domain: "Standard English Conventions", difficulty: mediumHard, responseType: "mc" }, moduleNumber === 1 ? 7 : 6),
+    ...repeatRequests({ skill: "Transitions", difficulty: mediumHard, responseType: "mc" }, 2),
+    ...repeatRequests({ skill: "Rhetorical Synthesis", difficulty: moduleNumber === 1 ? "Medium" : ["Medium", "Hard"], responseType: "mc" }, moduleNumber === 1 ? 1 : 2),
+  ];
+
   return {
     id,
     label,
-    section,
+    section: "Verbal",
     moduleNumber,
-    durationMinutes,
-    questions: pool.slice(offset, offset + count),
+    durationMinutes: 32,
+    questions: pickQuestions("Verbal", blueprint.slice(0, 27), usedIds),
+  };
+};
+
+const createMathModule = (
+  id: string,
+  label: string,
+  moduleNumber: 1 | 2,
+  usedIds: Set<string>
+): PracticePaperModule => {
+  const domains = [
+    "Algebra",
+    "Advanced Math",
+    "Problem-Solving and Data Analysis",
+    "Algebra",
+    "Geometry and Trigonometry",
+    "Advanced Math",
+    "Algebra",
+    "Problem-Solving and Data Analysis",
+    "Geometry and Trigonometry",
+    "Algebra",
+    "Advanced Math",
+    "Problem-Solving and Data Analysis",
+    "Algebra",
+    "Geometry and Trigonometry",
+    "Advanced Math",
+    "Problem-Solving and Data Analysis",
+    "Algebra",
+    "Advanced Math",
+    "Geometry and Trigonometry",
+    "Problem-Solving and Data Analysis",
+    "Advanced Math",
+    "Algebra",
+  ];
+  const moduleOneDifficulties: Difficulty[] = [
+    "Easy",
+    "Easy",
+    "Easy",
+    "Medium",
+    "Easy",
+    "Medium",
+    "Medium",
+    "Medium",
+    "Medium",
+    "Medium",
+    "Medium",
+    "Medium",
+    "Hard",
+    "Medium",
+    "Hard",
+    "Medium",
+    "Hard",
+    "Hard",
+    "Hard",
+    "Hard",
+    "Hard",
+    "Hard",
+  ];
+  const moduleTwoDifficulties: Difficulty[] = [
+    "Medium",
+    "Medium",
+    "Medium",
+    "Medium",
+    "Medium",
+    "Hard",
+    "Medium",
+    "Hard",
+    "Medium",
+    "Hard",
+    "Hard",
+    "Medium",
+    "Hard",
+    "Hard",
+    "Hard",
+    "Hard",
+    "Hard",
+    "Hard",
+    "Hard",
+    "Hard",
+    "Hard",
+    "Hard",
+  ];
+  const difficultyPattern = moduleNumber === 1 ? moduleOneDifficulties : moduleTwoDifficulties;
+  const blueprint = domains.map<QuestionPickRequest>((domain, index) => ({
+    domain,
+    difficulty: difficultyPattern[index],
+    responseType: index >= 17 ? "free" : "mc",
+  }));
+
+  return {
+    id,
+    label,
+    section: "Math",
+    moduleNumber,
+    durationMinutes: 35,
+    questions: pickQuestions("Math", blueprint, usedIds),
+  };
+};
+
+const createFullDigitalSatPracticePaper = (): PracticePaper => {
+  const usedIds = new Set<string>();
+  const modules = [
+    createReadingWritingModule("sat4-rw-m1", "Reading and Writing · Module 1", 1, usedIds),
+    createReadingWritingModule("sat4-rw-m2", "Reading and Writing · Module 2", 2, usedIds),
+    createMathModule("sat4-math-m1", "Math · Module 1", 1, usedIds),
+    createMathModule("sat4-math-m2", "Math · Module 2", 2, usedIds),
+  ];
+
+  return {
+    id: "sat4-full-practice-1",
+    title: "sat4.me Full Digital SAT Practice Test 1",
+    dateLabel: "Practice Test 1",
+    sourceLabel: "Built from SAT Question Bank · balanced DSAT blueprint",
+    modules,
   };
 };
 
 const practicePapers: PracticePaper[] = [
-  {
-    id: "dec-2024-int-1",
-    title: "DSAT December 2024 International 1",
-    dateLabel: "December 2024",
-    sourceLabel: "Reading & Writing paper uploaded",
-    modules: [
-      createPracticePaperModule("dec-2024-rw-m1", "Reading and Writing · Module 1", "Verbal", 1, 32, 27, 0),
-      createPracticePaperModule("dec-2024-rw-m2", "Reading and Writing · Module 2", "Verbal", 2, 32, 27, 27),
-      createPracticePaperModule("dec-2024-math-m1", "Math · Module 1", "Math", 1, 35, 22, 0),
-      createPracticePaperModule("dec-2024-math-m2", "Math · Module 2", "Math", 2, 35, 22, 22),
-    ],
-  },
+  createFullDigitalSatPracticePaper(),
 ];
 
 export default function App() {
@@ -2240,6 +2430,47 @@ function PracticePapersView() {
           </button>
         ))}
       </div>
+      <article className="practice-plan-card">
+        <header>
+          <div>
+            <p className="eyebrow">Blueprint check</p>
+            <h2>98 unique questions arranged like a full Digital SAT.</h2>
+          </div>
+          <strong>{activePaper.modules.reduce((sum, module) => sum + module.questions.length, 0)} questions</strong>
+        </header>
+        <div className="practice-plan-table">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Question ID</th>
+                <th>Section</th>
+                <th>Module</th>
+                <th>Domain</th>
+                <th>Skill</th>
+                <th>Difficulty</th>
+                <th>Type</th>
+              </tr>
+            </thead>
+            <tbody>
+              {activePaper.modules.flatMap((module) =>
+                module.questions.map((question, questionIndex) => (
+                  <tr key={`${module.id}-${question.id}`}>
+                    <td>{questionIndex + 1}</td>
+                    <td>{question.id}</td>
+                    <td>{sectionLabel(module.section)}</td>
+                    <td>{module.moduleNumber}</td>
+                    <td>{question.domain}</td>
+                    <td>{question.skill}</td>
+                    <td>{question.difficulty}</td>
+                    <td>{isFreeResponseQuestion(question) ? "Student-produced" : "Multiple choice"}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </article>
     </section>
   );
 }
