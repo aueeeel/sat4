@@ -164,18 +164,33 @@ const splitPrompt = (prompt: string) => {
   );
 
   if (questionStart <= 0) {
-    return { passage: "", questionText: trimmed.replace(/\s+/g, " ") };
+    return { passage: "", questionText: trimmed.replace(/\s+/g, " "), notesIntro: "", notes: [] as string[] };
   }
 
+  const passageRaw = trimmed.slice(0, questionStart).trim();
+  const passageLines = passageRaw
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const notesIntro = passageLines.find((line) => /following notes:?$/i.test(line)) ?? "";
+  const notes = notesIntro
+    ? passageLines
+        .slice(passageLines.indexOf(notesIntro) + 1)
+        .map((line) => line.replace(/^[•\-–]\s*/, "").trim())
+        .filter(Boolean)
+    : [];
+
   return {
-    passage: trimmed
-      .slice(0, questionStart)
-      .trim()
-      .split(/\n{2,}/)
-      .map((paragraph) => paragraph.replace(/\s*\n\s*/g, " ").replace(/\s+/g, " ").trim())
-      .filter(Boolean)
-      .join("\n\n"),
+    passage: notesIntro
+      ? ""
+      : passageRaw
+          .split(/\n{2,}/)
+          .map((paragraph) => paragraph.replace(/\s*\n\s*/g, " ").replace(/\s+/g, " ").trim())
+          .filter(Boolean)
+          .join("\n\n"),
     questionText: trimmed.slice(questionStart).trim().replace(/\s+/g, " "),
+    notesIntro,
+    notes,
   };
 };
 
@@ -2413,6 +2428,11 @@ function PracticePapersView() {
     const questionMarked = Boolean(markedForReview[activeQuestion.id]);
     const isFreeResponse = isFreeResponseQuestion(activeQuestion);
     const sectionNumber = activeModule.section === "Verbal" ? 1 : 2;
+    const isVerbalPaperQuestion = activeModule.section === "Verbal";
+    const verbalQuestionOnLeft = isVerbalPaperQuestion && !activePrompt.passage && !activePrompt.notes.length;
+    const rightQuestionText = verbalQuestionOnLeft
+      ? "Which choice best completes the text?"
+      : activePrompt.questionText;
 
     const navigator = navOpen && (
       <div className="paper-nav-popover">
@@ -2560,8 +2580,25 @@ function PracticePapersView() {
               </table>
             </article>
           ) : (
-            <article className={activePrompt.passage ? "paper-passage" : "paper-passage paper-passage-empty"}>
-              {activePrompt.passage || (activeModule.section === "Math" ? "" : "Read the question on the right and choose the best answer.")}
+            <article
+              className={[
+                "paper-passage",
+                activePrompt.notes.length ? "paper-notes-passage" : "",
+                !activePrompt.passage && !activePrompt.notes.length && !verbalQuestionOnLeft ? "paper-passage-empty" : "",
+              ].join(" ")}
+            >
+              {activePrompt.notes.length ? (
+                <div className="paper-notes-block">
+                  <p>{activePrompt.notesIntro}</p>
+                  <ul>
+                    {activePrompt.notes.map((note) => (
+                      <li key={note}>{note}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                activePrompt.passage || (verbalQuestionOnLeft ? activePrompt.questionText : "")
+              )}
             </article>
           )}
 
@@ -2581,7 +2618,7 @@ function PracticePapersView() {
               </button>
               <em><FileQuestion size={15} /> Report</em>
             </header>
-            <p className="paper-question-text">{activePrompt.questionText}</p>
+            <p className="paper-question-text">{rightQuestionText}</p>
             {isFreeResponse ? (
               <label className="paper-free-response-field">
                 <span>Your answer</span>
