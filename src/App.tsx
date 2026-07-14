@@ -155,6 +155,24 @@ type ActionBarItem = {
 
 const splitPrompt = (prompt: string) => {
   const trimmed = prompt.trim();
+  const notesPrompt = trimmed.match(/^(.*?following notes:)\s*\n([\s\S]*)$/i);
+  if (notesPrompt) {
+    const body = notesPrompt[2].trim();
+    const studentGoalMatch = body.match(/\n(The student wants[\s\S]*)$/i);
+    if (studentGoalMatch) {
+      const notesRaw = body.slice(0, body.length - studentGoalMatch[0].length).trim();
+      return {
+        passage: "",
+        questionText: studentGoalMatch[1].replace(/\s+/g, " ").trim(),
+        notesIntro: notesPrompt[1].replace(/\s+/g, " ").trim(),
+        notes: notesRaw
+          .split(/\n+/)
+          .map((line) => line.replace(/^[•\-–]\s*/, "").replace(/\s+/g, " ").trim())
+          .filter(Boolean),
+      };
+    }
+  }
+
   const questionStart = Math.max(
     trimmed.lastIndexOf("\nWhich "),
     trimmed.lastIndexOf("\nWhat "),
