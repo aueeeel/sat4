@@ -104,8 +104,23 @@ type VocabularyCard = {
   example: string;
   source?: string;
 };
+type VocabularyDifficulty = "Easy" | "Medium" | "Hard";
+type VocabularyMode = "flashcards" | "matching" | "sentence" | "library";
+type SentenceFeedback = { status: "success" | "improve"; title: string; message: string };
 
 const vocabularyCards = vocabularyData as VocabularyCard[];
+const vocabularyStopWords = new Set(["about", "after", "again", "also", "because", "been", "being", "from", "have", "into", "just", "more", "most", "much", "someone", "something", "that", "their", "there", "these", "they", "this", "through", "very", "what", "when", "where", "which", "while", "with", "without", "your"]);
+const getVocabularyDifficulty = (card: VocabularyCard): VocabularyDifficulty => {
+  const wordLength = card.word.replace(/[^a-z]/gi, "").length;
+  const meaningLength = card.meaning.split(/\s+/).length;
+  if (wordLength <= 7 && meaningLength <= 7) return "Easy";
+  if (wordLength >= 11 || meaningLength >= 13) return "Hard";
+  return "Medium";
+};
+const shuffleVocabulary = <T,>(items: T[]) => [...items]
+  .map((item) => ({ item, order: Math.random() }))
+  .sort((a, b) => a.order - b.order)
+  .map(({ item }) => item);
 const difficulties: Array<Difficulty | "All"> = ["All", "Easy", "Medium", "Hard"];
 
 const unique = (items: string[]) => Array.from(new Set(items));
@@ -3820,10 +3835,10 @@ function StudyRoomDock({
 }
 
 function VocabularyView() {
-  const pageSize = 60;
-  const [page, setPage] = useState(1);
-  const [flippedCards, setFlippedCards] = useState<string[]>([]);
-  const [vocabMode, setVocabMode] = useState<"all" | "favorites">("all");
+  const [learningMode, setLearningMode] = useState<VocabularyMode>("flashcards");
+  const [collectionMode, setCollectionMode] = useState<"all" | "favorites">("all");
+  const [cardIndex, setCardIndex] = useState(0);
+  const [cardFlipped, setCardFlipped] = useState(false);
   const [favoriteWords, setFavoriteWords] = useState<string[]>(() => {
     if (typeof window === "undefined") return [];
     try {
@@ -3833,159 +3848,333 @@ function VocabularyView() {
       return [];
     }
   });
+  const [matchingRound, setMatchingRound] = useState<VocabularyCard[]>(() => shuffleVocabulary(vocabularyCards).slice(0, 5));
+  const [selectedMatchWord, setSelectedMatchWord] = useState("");
+  const [matchedWords, setMatchedWords] = useState<string[]>([]);
+  const [matchingMistakes, setMatchingMistakes] = useState(0);
+  const [matchingStartedAt, setMatchingStartedAt] = useState(Date.now());
+  const [matchingSeconds, setMatchingSeconds] = useState(0);
+  const [matchingComplete, setMatchingComplete] = useState(false);
+  const [matchingFeedback, setMatchingFeedback] = useState("Choose a word, then choose its definition.");
+  const [matchingFeedbackTone, setMatchingFeedbackTone] = useState<"neutral" | "error" | "success">("neutral");
+  const [wrongMatchWord, setWrongMatchWord] = useState("");
+  const [wrongDefinitionWord, setWrongDefinitionWord] = useState("");
+  const [sentenceIndex, setSentenceIndex] = useState(0);
+  const [sentenceInput, setSentenceInput] = useState("");
+  const [sentenceFeedback, setSentenceFeedback] = useState<SentenceFeedback | null>(null);
+  const [libraryQuery, setLibraryQuery] = useState("");
+  const [libraryDifficulty, setLibraryDifficulty] = useState<VocabularyDifficulty | "All">("All");
+  const [libraryPage, setLibraryPage] = useState(0);
   const favoriteSet = useMemo(() => new Set(favoriteWords), [favoriteWords]);
   const activeVocabularyCards = useMemo(
-    () => (vocabMode === "favorites" ? vocabularyCards.filter((card) => favoriteSet.has(card.word.toLowerCase())) : vocabularyCards),
-    [favoriteSet, vocabMode]
+    () => (collectionMode === "favorites" ? vocabularyCards.filter((card) => favoriteSet.has(card.word.toLowerCase())) : vocabularyCards),
+    [collectionMode, favoriteSet]
   );
-  const totalPages = Math.max(1, Math.ceil(activeVocabularyCards.length / pageSize));
-  const start = (page - 1) * pageSize;
-  const visibleCards = activeVocabularyCards.slice(start, start + pageSize);
-  const visiblePages = Array.from({ length: totalPages }, (_, index) => index + 1).filter(
-    (pageNumber) => pageNumber === 1 || pageNumber === totalPages || Math.abs(pageNumber - page) <= 1
-  );
+  const activeCard = activeVocabularyCards[cardIndex] ?? activeVocabularyCards[0] ?? null;
+  const sentenceCard = activeVocabularyCards[sentenceIndex] ?? activeVocabularyCards[0] ?? null;
+  const matchingDefinitions = useMemo(() => shuffleVocabulary(matchingRound), [matchingRound]);
+  const libraryCards = useMemo(() => {
+    const normalizedQuery = libraryQuery.trim().toLowerCase();
+    return activeVocabularyCards.filter((card) => {
+      const matchesQuery = !normalizedQuery || `${card.word} ${card.meaning}`.toLowerCase().includes(normalizedQuery);
+      const matchesDifficulty = libraryDifficulty === "All" || getVocabularyDifficulty(card) === libraryDifficulty;
+      return matchesQuery && matchesDifficulty;
+    });
+  }, [activeVocabularyCards, libraryDifficulty, libraryQuery]);
+  const libraryPageSize = 24;
+  const libraryPageCount = Math.max(1, Math.ceil(libraryCards.length / libraryPageSize));
+  const visibleLibraryCards = libraryCards.slice(libraryPage * libraryPageSize, (libraryPage + 1) * libraryPageSize);
 
   useEffect(() => {
     window.localStorage.setItem("4sat:vocabulary:favorites", JSON.stringify(favoriteWords));
   }, [favoriteWords]);
 
   useEffect(() => {
-    if (page > totalPages) setPage(totalPages);
-  }, [page, totalPages]);
+    if (cardIndex >= activeVocabularyCards.length) setCardIndex(0);
+    if (sentenceIndex >= activeVocabularyCards.length) setSentenceIndex(0);
+  }, [activeVocabularyCards.length, cardIndex, sentenceIndex]);
 
-  const changePage = (nextPage: number) => {
-    const safePage = Math.min(Math.max(nextPage, 1), totalPages);
-    setPage(safePage);
-    setFlippedCards([]);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
+  useEffect(() => {
+    if (libraryPage >= libraryPageCount) setLibraryPage(Math.max(0, libraryPageCount - 1));
+  }, [libraryPage, libraryPageCount]);
 
-  const toggleCard = (key: string) => {
-    setFlippedCards((current) => (current.includes(key) ? current.filter((item) => item !== key) : [...current, key]));
-  };
-
-  const changeVocabMode = (mode: "all" | "favorites") => {
-    setVocabMode(mode);
-    setPage(1);
-    setFlippedCards([]);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
+  useEffect(() => {
+    if (learningMode !== "matching" || matchingComplete) return;
+    const timer = window.setInterval(() => setMatchingSeconds(Math.floor((Date.now() - matchingStartedAt) / 1000)), 250);
+    return () => window.clearInterval(timer);
+  }, [learningMode, matchingComplete, matchingStartedAt]);
 
   const toggleFavorite = (word: string) => {
     const key = word.toLowerCase();
     setFavoriteWords((current) => (current.includes(key) ? current.filter((item) => item !== key) : [...current, key]));
   };
 
+  const changeCollectionMode = (mode: "all" | "favorites") => {
+    setCollectionMode(mode);
+    setCardIndex(0);
+    setSentenceIndex(0);
+    setCardFlipped(false);
+    setSentenceInput("");
+    setSentenceFeedback(null);
+  };
+
+  const resetMatchingRound = () => {
+    const source = activeVocabularyCards.length ? activeVocabularyCards : [];
+    setMatchingRound(shuffleVocabulary(source).slice(0, 5));
+    setSelectedMatchWord("");
+    setMatchedWords([]);
+    setMatchingMistakes(0);
+    setMatchingStartedAt(Date.now());
+    setMatchingSeconds(0);
+    setMatchingComplete(false);
+    setMatchingFeedback("Choose a word, then choose its definition.");
+    setMatchingFeedbackTone("neutral");
+    setWrongMatchWord("");
+    setWrongDefinitionWord("");
+  };
+
+  const changeLearningMode = (mode: VocabularyMode) => {
+    setLearningMode(mode);
+    if (mode === "sentence") {
+      setSentenceInput("");
+      setSentenceFeedback(null);
+    }
+  };
+
+  useEffect(() => {
+    if (learningMode === "matching") resetMatchingRound();
+  }, [collectionMode, learningMode]);
+
+  const moveCard = (direction: -1 | 1) => {
+    if (!activeVocabularyCards.length) return;
+    setCardIndex((current) => (current + direction + activeVocabularyCards.length) % activeVocabularyCards.length);
+    setCardFlipped(false);
+  };
+
+  const chooseDefinition = (word: string) => {
+    if (!selectedMatchWord || matchedWords.includes(word)) {
+      if (!selectedMatchWord) {
+        setMatchingFeedback("Select a word first.");
+        setMatchingFeedbackTone("error");
+      }
+      return;
+    }
+    if (selectedMatchWord !== word) {
+      setMatchingMistakes((current) => current + 1);
+      setMatchingFeedback("Not a match — both choices are highlighted below.");
+      setMatchingFeedbackTone("error");
+      setWrongMatchWord(selectedMatchWord);
+      setWrongDefinitionWord(word);
+      return;
+    }
+    const nextMatched = [...matchedWords, word];
+    setMatchedWords(nextMatched);
+    setSelectedMatchWord("");
+    setMatchingFeedback("Correct pair.");
+    setMatchingFeedbackTone("success");
+    setWrongMatchWord("");
+    setWrongDefinitionWord("");
+    if (nextMatched.length === matchingRound.length) {
+      setMatchingSeconds(Math.floor((Date.now() - matchingStartedAt) / 1000));
+      setMatchingComplete(true);
+    }
+  };
+
+  const checkSentence = () => {
+    if (!sentenceCard) return;
+    const normalizedSentence = sentenceInput.toLowerCase().replace(/[^a-z'\s-]/g, " ");
+    const tokens = normalizedSentence.split(/\s+/).filter(Boolean);
+    const target = sentenceCard.word.toLowerCase().replace(/[^a-z]/g, "");
+    const stem = target.endsWith("e") && target.length > 5 ? target.slice(0, -1) : target;
+    const usesTarget = tokens.some((token) => token === target || (stem.length >= 5 && token.startsWith(stem)));
+    const contextTerms = sentenceCard.meaning.toLowerCase().match(/[a-z]+/g)?.filter((term) => term.length >= 4 && !vocabularyStopWords.has(term)) ?? [];
+    const contextMatches = contextTerms.filter((term) => tokens.some((token) => token === term || (term.length >= 5 && token.startsWith(term.slice(0, 5))))).length;
+    const hasUsefulContext = contextMatches > 0 || tokens.length >= 11 || tokens.some((token) => ["because", "although", "when", "while", "after", "before", "but"].includes(token));
+
+    if (!usesTarget) {
+      setSentenceFeedback({ status: "improve", title: `Use “${sentenceCard.word}” in the sentence`, message: `Keep the target word visible so its meaning can be checked. It means: ${sentenceCard.meaning}` });
+    } else if (tokens.length < 7) {
+      setSentenceFeedback({ status: "improve", title: "Add enough context", message: `The word is present, but the sentence is too short to prove the meaning. Show who, what, or why.` });
+    } else if (!hasUsefulContext) {
+      setSentenceFeedback({ status: "improve", title: "Make the meaning clearer", message: `Your grammar looks workable. Add context that communicates “${sentenceCard.meaning.toLowerCase()}” more directly.` });
+    } else {
+      setSentenceFeedback({ status: "success", title: "Yes — that usage works", message: `You used “${sentenceCard.word}” in a complete sentence with enough context to communicate its meaning.` });
+    }
+  };
+
+  const nextSentenceWord = () => {
+    if (!activeVocabularyCards.length) return;
+    setSentenceIndex((current) => (current + 1) % activeVocabularyCards.length);
+    setSentenceInput("");
+    setSentenceFeedback(null);
+  };
+
+  const openLibraryWord = (card: VocabularyCard) => {
+    const index = activeVocabularyCards.findIndex((item) => item.word === card.word);
+    setCardIndex(Math.max(0, index));
+    setCardFlipped(false);
+    setLearningMode("flashcards");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   return (
     <section className="vocab-page">
-      <div className="vocab-mini-tabs" aria-label="Vocabulary filters">
-        <button className={vocabMode === "all" ? "active" : ""} onClick={() => changeVocabMode("all")}>
-          All words
+      <header className="vocab-header">
+        <div>
+          <span>Vocabulary Lab</span>
+          <h2>Learn words by using them.</h2>
+          <p>Study the meaning, connect pairs under pressure, then prove you can use each word in context.</p>
+        </div>
+        <div className="vocab-collection-switch" aria-label="Vocabulary collection">
+          <button className={collectionMode === "all" ? "active" : ""} onClick={() => changeCollectionMode("all")}>All words</button>
+          <button className={collectionMode === "favorites" ? "active" : ""} onClick={() => changeCollectionMode("favorites")}>
+            <Star size={14} /> Favorites <span>{favoriteWords.length}</span>
+          </button>
+        </div>
+      </header>
+
+      <div className="vocab-mode-tabs" role="tablist" aria-label="Vocabulary practice modes">
+        <button role="tab" aria-selected={learningMode === "flashcards"} className={learningMode === "flashcards" ? "active" : ""} onClick={() => changeLearningMode("flashcards")}>
+          <NotebookTabs size={18} /><span><strong>Flashcards</strong><small>Learn one word at a time</small></span>
         </button>
-        <button className={vocabMode === "favorites" ? "active" : ""} onClick={() => changeVocabMode("favorites")}>
-          <Star size={14} />
-          Favorites
-          <span>{favoriteWords.length}</span>
+        <button role="tab" aria-selected={learningMode === "matching"} className={learningMode === "matching" ? "active" : ""} onClick={() => changeLearningMode("matching")}>
+          <Clock3 size={18} /><span><strong>Speed Match</strong><small>Pair words and meanings</small></span>
+        </button>
+        <button role="tab" aria-selected={learningMode === "sentence"} className={learningMode === "sentence" ? "active" : ""} onClick={() => changeLearningMode("sentence")}>
+          <FileText size={18} /><span><strong>Use It</strong><small>Write and check a sentence</small></span>
+        </button>
+        <button role="tab" aria-selected={learningMode === "library"} className={learningMode === "library" ? "active" : ""} onClick={() => changeLearningMode("library")}>
+          <LibraryBig size={18} /><span><strong>Word Library</strong><small>Search all {vocabularyCards.length} words</small></span>
         </button>
       </div>
 
-      <div className="vocab-toolbar">
-        <span>
-          {activeVocabularyCards.length ? `${start + 1}-${Math.min(start + pageSize, activeVocabularyCards.length)}` : "0"}
-        </span>
-        <strong>{activeVocabularyCards.length} words</strong>
-      </div>
-
-      <div className="vocab-grid" aria-label="SAT vocabulary flashcards">
-        {visibleCards.map((card, index) => {
-          const key = `${card.word}-${start + index}`;
-          const isFlipped = flippedCards.includes(key);
-          const isFavorite = favoriteSet.has(card.word.toLowerCase());
-
-          return (
-            <article key={key} className={isFlipped ? "vocab-card flipped" : "vocab-card"}>
-              <button
-                className={isFavorite ? "vocab-favorite active" : "vocab-favorite"}
-                onClick={() => toggleFavorite(card.word)}
-                aria-label={isFavorite ? `Remove ${card.word} from favorites` : `Add ${card.word} to favorites`}
-              >
-                <Star size={16} />
-              </button>
-              <button
-                className="vocab-card-flip"
-                onClick={() => toggleCard(key)}
-                aria-label={isFlipped ? `Hide meaning for ${card.word}` : `Show meaning for ${card.word}`}
-              >
-                <span className="vocab-card-inner">
-                  <span className="vocab-card-face vocab-card-front">
-                    <strong>{card.word}</strong>
-                  </span>
-                  <span className="vocab-card-face vocab-card-back">
-                    <strong>{card.word}</strong>
-                    <span>{card.meaning}</span>
-                    <em>{card.example}</em>
-                  </span>
-                </span>
-              </button>
-            </article>
-          );
-        })}
-      </div>
-
-      {!visibleCards.length && (
+      {!activeVocabularyCards.length ? (
         <div className="vocab-empty">
           <Star size={22} />
           <strong>No favorite words yet</strong>
-          <span>Tap the star on any card to save it here.</span>
+          <span>Return to All words and save a few words to build your personal set.</span>
+          <button onClick={() => changeCollectionMode("all")}>Browse all words</button>
         </div>
-      )}
-
-      <nav className="vocab-pagination" aria-label="Vocabulary pages">
-        <button className="vocab-page-nav" disabled={page === 1} onClick={() => changePage(page - 1)}>
-          <ChevronLeft size={16} />
-          Previous
-        </button>
-        <div className="vocab-page-numbers">
-          {visiblePages.map((pageNumber, index) => {
-            const previousPage = visiblePages[index - 1];
-            return (
-              <FragmentedVocabPageButton
-                key={pageNumber}
-                page={pageNumber}
-                previousVisible={Boolean(previousPage && pageNumber - previousPage > 1)}
-                active={pageNumber === page}
-                onClick={() => changePage(pageNumber)}
-              />
-            );
-          })}
+      ) : learningMode === "flashcards" && activeCard ? (
+        <div className="vocab-flashcard-mode" role="tabpanel">
+          <div className="vocab-session-meta">
+            <span>{cardIndex + 1} of {activeVocabularyCards.length}</span>
+            <div><span className={`vocab-difficulty ${getVocabularyDifficulty(activeCard).toLowerCase()}`}>{getVocabularyDifficulty(activeCard)}</span><strong>{activeVocabularyCards.length} words in set</strong></div>
+          </div>
+          <div className="vocab-study-wrap">
+            <button
+              className={favoriteSet.has(activeCard.word.toLowerCase()) ? "vocab-study-favorite active" : "vocab-study-favorite"}
+              onClick={() => toggleFavorite(activeCard.word)}
+              aria-label={favoriteSet.has(activeCard.word.toLowerCase()) ? `Remove ${activeCard.word} from favorites` : `Add ${activeCard.word} to favorites`}
+            ><Star size={18} /></button>
+            <button className={cardFlipped ? "vocab-study-card flipped" : "vocab-study-card"} onClick={() => setCardFlipped((value) => !value)} aria-label={cardFlipped ? `Show word ${activeCard.word}` : `Show meaning of ${activeCard.word}`}>
+              <span className="vocab-study-card-inner">
+                <span className="vocab-study-face front">
+                  <span className={`vocab-difficulty ${getVocabularyDifficulty(activeCard).toLowerCase()}`}>{getVocabularyDifficulty(activeCard)}</span>
+                  <strong>{activeCard.word}</strong>
+                  <small>Tap the card to reveal the meaning</small>
+                </span>
+                <span className="vocab-study-face back">
+                  <span>Definition</span>
+                  <strong>{activeCard.meaning}</strong>
+                  <em>“{activeCard.example}”</em>
+                  <small>Tap to see the word again</small>
+                </span>
+              </span>
+            </button>
+          </div>
+          <nav className="vocab-study-nav" aria-label="Flashcard navigation">
+            <button onClick={() => moveCard(-1)}><ChevronLeft size={17} />Previous</button>
+            <div className="vocab-study-progress"><span style={{ width: `${((cardIndex + 1) / activeVocabularyCards.length) * 100}%` }} /></div>
+            <button onClick={() => moveCard(1)}>Next<ChevronRight size={17} /></button>
+          </nav>
         </div>
-        <button className="vocab-page-nav" disabled={page === totalPages} onClick={() => changePage(page + 1)}>
-          Next
-          <ChevronRight size={16} />
-        </button>
-      </nav>
+      ) : learningMode === "matching" ? (
+        <div className="vocab-matching-mode" role="tabpanel">
+          <header className="vocab-game-header">
+            <div><span>Speed Match</span><h3>Connect each word to its definition.</h3><p className={matchingFeedbackTone} role={matchingFeedbackTone === "error" ? "alert" : "status"}>{matchingFeedback}</p></div>
+            <div className="vocab-game-stats"><span><Clock3 size={15} /><strong>{matchingSeconds}s</strong>Time</span><span className={matchingMistakes ? "has-error" : ""}><X size={15} /><strong>{matchingMistakes}</strong>Mistakes</span><span><Check size={15} /><strong>{matchedWords.length}/{matchingRound.length}</strong>Matched</span></div>
+          </header>
+          {matchingComplete ? (
+            <div className="vocab-game-complete" role="status">
+              <div><Check size={24} /></div>
+              <span>Round complete</span>
+              <h3>{matchingSeconds} seconds · {matchingMistakes} {matchingMistakes === 1 ? "mistake" : "mistakes"}</h3>
+              <p>Run another set to improve recognition speed.</p>
+              <button onClick={resetMatchingRound}><RotateCcw size={16} />Play another round</button>
+            </div>
+          ) : (
+            <div className="vocab-match-board">
+              <section><h4>Words</h4>{matchingRound.map((card) => <button key={card.word} disabled={matchedWords.includes(card.word)} className={wrongMatchWord === card.word ? "wrong" : selectedMatchWord === card.word ? "selected" : matchedWords.includes(card.word) ? "matched" : ""} onClick={() => { setSelectedMatchWord(card.word); setWrongMatchWord(""); setWrongDefinitionWord(""); setMatchingFeedbackTone("neutral"); setMatchingFeedback(`Now choose the meaning of “${card.word}”.`); }}>{card.word}<span className={`vocab-difficulty ${getVocabularyDifficulty(card).toLowerCase()}`}>{getVocabularyDifficulty(card)}</span></button>)}</section>
+              <section><h4>Definitions</h4>{matchingDefinitions.map((card) => <button key={card.word} disabled={matchedWords.includes(card.word)} className={wrongDefinitionWord === card.word ? "wrong" : matchedWords.includes(card.word) ? "matched" : ""} onClick={() => chooseDefinition(card.word)}>{card.meaning}{matchedWords.includes(card.word) && <Check size={16} />}</button>)}</section>
+            </div>
+          )}
+        </div>
+      ) : learningMode === "library" ? (
+        <div className="vocab-library-mode" role="tabpanel">
+          <header className="vocab-library-header">
+            <div>
+              <span>Complete collection</span>
+              <h3>Word Library</h3>
+              <p>Search definitions, filter by difficulty, and open any word as a flashcard.</p>
+            </div>
+            <label className="vocab-library-search">
+              <Search size={17} />
+              <span className="sr-only">Search words and definitions</span>
+              <input value={libraryQuery} onChange={(event) => { setLibraryQuery(event.target.value); setLibraryPage(0); }} placeholder="Search words or definitions" />
+            </label>
+          </header>
+          <div className="vocab-library-toolbar">
+            <div role="group" aria-label="Filter words by difficulty">
+              {(["All", "Easy", "Medium", "Hard"] as const).map((difficulty) => (
+                <button key={difficulty} className={libraryDifficulty === difficulty ? "active" : ""} aria-pressed={libraryDifficulty === difficulty} onClick={() => { setLibraryDifficulty(difficulty); setLibraryPage(0); }}>{difficulty}</button>
+              ))}
+            </div>
+            <span>{libraryCards.length.toLocaleString()} {libraryCards.length === 1 ? "word" : "words"}</span>
+          </div>
+          {visibleLibraryCards.length ? (
+            <div className="vocab-library-list" aria-label="Vocabulary word library">
+              <div className="vocab-library-columns"><span>Word</span><span>Definition</span><span>Level</span></div>
+              {visibleLibraryCards.map((card) => {
+                const isFavorite = favoriteSet.has(card.word.toLowerCase());
+                return (
+                  <article key={card.word}>
+                    <button className="vocab-library-word" onClick={() => openLibraryWord(card)}>
+                      <strong>{card.word}</strong>
+                      <span>{card.meaning}</span>
+                      <span className={`vocab-difficulty ${getVocabularyDifficulty(card).toLowerCase()}`}>{getVocabularyDifficulty(card)}</span>
+                    </button>
+                    <button className={isFavorite ? "vocab-library-favorite active" : "vocab-library-favorite"} onClick={() => toggleFavorite(card.word)} aria-label={isFavorite ? `Remove ${card.word} from favorites` : `Add ${card.word} to favorites`}><Star size={16} /></button>
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="vocab-library-empty"><Search size={20} /><strong>No words found</strong><span>Try another spelling or clear the difficulty filter.</span></div>
+          )}
+          <nav className="vocab-library-pagination" aria-label="Word library pages">
+            <button disabled={libraryPage === 0} onClick={() => setLibraryPage((current) => Math.max(0, current - 1))}><ChevronLeft size={16} />Previous</button>
+            <span>{libraryPage + 1} of {libraryPageCount}</span>
+            <button disabled={libraryPage >= libraryPageCount - 1} onClick={() => setLibraryPage((current) => Math.min(libraryPageCount - 1, current + 1))}>Next<ChevronRight size={16} /></button>
+          </nav>
+        </div>
+      ) : sentenceCard ? (
+        <div className="vocab-sentence-mode" role="tabpanel">
+          <div className="vocab-sentence-prompt">
+            <span>Use this word</span>
+            <div><h3>{sentenceCard.word}</h3><span className={`vocab-difficulty ${getVocabularyDifficulty(sentenceCard).toLowerCase()}`}>{getVocabularyDifficulty(sentenceCard)}</span></div>
+            <p>{sentenceCard.meaning}</p>
+          </div>
+          <div className="vocab-sentence-editor">
+            <label htmlFor="vocabulary-sentence">Write one clear sentence</label>
+            <textarea id="vocabulary-sentence" value={sentenceInput} onChange={(event) => { setSentenceInput(event.target.value); setSentenceFeedback(null); }} placeholder={`Write a sentence using “${sentenceCard.word}”…`} rows={5} />
+            <div className="vocab-sentence-actions"><span>{sentenceInput.trim().split(/\s+/).filter(Boolean).length} words</span><button disabled={!sentenceInput.trim()} onClick={checkSentence}>Check my sentence<ChevronRight size={15} /></button></div>
+          </div>
+          {sentenceFeedback && <div className={`vocab-sentence-feedback ${sentenceFeedback.status}`} role="status"><div>{sentenceFeedback.status === "success" ? <Check size={19} /> : <Sparkle size={19} />}</div><span><strong>{sentenceFeedback.title}</strong><p>{sentenceFeedback.message}</p>{sentenceFeedback.status === "improve" && <small>Example: “{sentenceCard.example}”</small>}</span><button onClick={nextSentenceWord}>{sentenceFeedback.status === "success" ? "Next word" : "Try another word"}<ChevronRight size={15} /></button></div>}
+          {!sentenceFeedback && <button className="vocab-skip-word" onClick={nextSentenceWord}>Skip this word</button>}
+        </div>
+      ) : null}
     </section>
-  );
-}
-
-function FragmentedVocabPageButton({
-  page,
-  previousVisible,
-  active,
-  onClick,
-}: {
-  page: number;
-  previousVisible: boolean;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <>
-      {previousVisible && <span className="vocab-page-ellipsis">...</span>}
-      <button className={active ? "vocab-page-link active" : "vocab-page-link"} onClick={onClick}>
-        {page}
-      </button>
-    </>
   );
 }
 
