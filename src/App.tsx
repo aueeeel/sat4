@@ -1258,8 +1258,8 @@ export default function App() {
           <div className="video-hero-overlay" />
           <nav className="guest-hero-nav">
             <div className="brand">
-              <img className="brand-logo" src="/brand/4sat-logo.png" alt="sat4.me logo" />
-              <span>sat4.me</span>
+              <img className="brand-logo-large" src="/brand/4sat-logo.png" alt="sat4.me logo" />
+              <span className="brand-text">sat4.me</span>
             </div>
             <div className="auth-nav-actions">
               <button className="ghost-button" onClick={() => openAuthPage("sign-in")}>
@@ -1272,7 +1272,6 @@ export default function App() {
           </nav>
 
           <div className="video-hero-content">
-            <p className="eyebrow">готовимся вместе</p>
             <h1>
               <span className="score-headline">
                 Are you stuck at
@@ -1305,6 +1304,7 @@ export default function App() {
           />
 
           <FeatureCardsShowcase />
+
         </div>
       </main>
     );
@@ -1798,7 +1798,6 @@ export default function App() {
             <video className="video-hero-media" src="/hero/road-background.mp4" autoPlay muted loop playsInline />
             <div className="video-hero-overlay" />
             <div className="video-hero-content">
-              <p className="eyebrow">готовимся вместе</p>
               <h1>
                 <span className="score-headline">
                   Are you stuck at
@@ -2526,16 +2525,21 @@ function StudentResultsShowcase({ onTryPractice }: { onTryPractice: () => void }
 
 function MotivationShowcase({ onOpenStudy, onPlayArena }: { onOpenStudy: () => void; onPlayArena: () => void }) {
   const dockFriends = [
-    { name: "A", color: "#54e2c0", delay: "0s" },
-    { name: "M", color: "#ff6000", delay: "-0.8s" },
-    { name: "S", color: "#6041b7", delay: "-1.5s" },
-    { name: "K", color: "#e94196", delay: "-2.2s" },
+    { name: "Alex", img: "https://i.pravatar.cc/80?img=11", delay: "0s" },
+    { name: "Maya", img: "https://i.pravatar.cc/80?img=5", delay: "-0.8s" },
+    { name: "Sam", img: "https://i.pravatar.cc/80?img=12", delay: "-1.5s" },
+    { name: "Kim", img: "https://i.pravatar.cc/80?img=16", delay: "-2.2s" },
+  ];
+  const battlePlayers = [
+    { rank: "1", name: "Julian Park", elo: "1,240", score: "5 correct", avatar: "/avatars/julian.webp", initials: "JP", isCurrent: false },
+    { rank: "2", name: "You", elo: "1,180", score: "4 correct", avatar: null, initials: "Y", isCurrent: true },
+    { rank: "3", name: "Sofia Reyes", elo: "1,120", score: "4 correct", avatar: "/avatars/sofia.webp", initials: "SR", isCurrent: false },
   ];
 
   return (
     <section className="motivation-showcase" aria-label="SAT Battle invitation">
       <div className="motivation-copy">
-        <p className="eyebrow">?? SAT BATTLE</p>
+        <p className="eyebrow">SAT BATTLE</p>
         <h2>
           Challenge
           <span>your <em>friends.</em></span>
@@ -2554,81 +2558,67 @@ function MotivationShowcase({ onOpenStudy, onPlayArena }: { onOpenStudy: () => v
           </button>
         </div>
         <div className="friend-dock-preview" aria-label="Friends dock preview">
-          <span className="friend-dock-sparkle">?</span>
+          <Users size={18} className="friend-dock-icon" />
           {dockFriends.map((friend) => (
-            <span
+            <img
               key={friend.name}
               className="friend-dock-avatar"
-              style={{ "--friend-color": friend.color, "--friend-delay": friend.delay } as CSSProperties}
-            >
-              {friend.name}
-              <i />
-            </span>
+              src={friend.img}
+              alt={friend.name}
+              title={friend.name}
+              style={{ "--friend-delay": friend.delay } as CSSProperties}
+            />
           ))}
         </div>
       </div>
 
-      <div className="score-journey-stage" aria-label="SAT score journey preview">
-        <div className="score-orbit-dots" aria-hidden="true">
-          <span />
-          <span />
-          <span />
-        </div>
-        <section className="score-journey-card">
-          <div className="score-lightning" aria-hidden="true">
-            <i />
-            <span />
-          </div>
-          <div className="score-card-top">
-            <div className="score-brand-mark">
-              <BookOpenCheck size={17} />
-            </div>
+      <div className="battle-visual-card" aria-label="SAT Battle preview">
+        <article className="battle-live-card">
+          <header className="battle-live-head">
+            <span className="battle-live-status"><i aria-hidden="true" /> Live match</span>
+            <span className="battle-live-room">Ranked room · 4 players</span>
+          </header>
+
+          <div className="battle-live-title-row">
             <div>
-              <small>sat4.me</small>
-              <strong>Digital SAT Suite</strong>
+              <h3>Precision under pressure.</h3>
             </div>
-            <span className="score-live-pill"><i /> Live practice</span>
+            <span className="battle-question-count"><strong>07</strong>/12</span>
           </div>
-          <div className="score-main">
-            <p>Your projected score</p>
-            <div>
-              <strong>1520</strong>
-              <span>/1600</span>
-              <em>+70</em>
-            </div>
-            <small>Top 99th percentile after adaptive drills and focused battle review.</small>
+
+          <div className="battle-domain-pill">
+            <Gauge size={16} aria-hidden="true" />
+            <span>Round 7 · Algebra + Craft &amp; Structure</span>
           </div>
-          <div className="score-bars">
-            <div className="score-bar-row">
-              <span><i className="score-dot amber" />Math</span>
-              <em>790/800</em>
-              <div><b style={{ width: "98%" }} /></div>
-            </div>
-            <div className="score-bar-row">
-              <span><i className="score-dot cyan" />Reading & Writing</span>
-              <em>730/800</em>
-              <div><b className="cyan" style={{ width: "91%" }} /></div>
-            </div>
-            <div className="score-bar-row">
-              <span><i className="score-dot violet" />Weak-area focus</span>
-              <em>Geometry · 12 drills</em>
-              <div><b className="violet" style={{ width: "64%" }} /></div>
-            </div>
+
+          <div className="battle-player-list" aria-label="Current leaderboard">
+            {battlePlayers.map((player) => (
+              <div className={`battle-player-row${player.isCurrent ? " is-current" : ""}`} key={player.name}>
+                <span className="battle-player-rank">{player.rank}</span>
+                <span className="battle-player-avatar">
+                  {player.avatar ? <img src={player.avatar} alt="" /> : <span aria-hidden="true">{player.initials}</span>}
+                </span>
+                <div className="battle-player-identity">
+                  <div><strong>{player.name}</strong></div>
+                  <span>{player.score}</span>
+                </div>
+                <div className="battle-player-rating"><strong>{player.elo}</strong><span>ELO</span></div>
+                {player.rank === "1" ? <Trophy size={16} aria-label="First place" /> : <span className="battle-player-delta" aria-hidden="true" />}
+              </div>
+            ))}
           </div>
-          <div className="score-chip-row">
-            <span>Advanced Math</span>
-            <span>Evidence Reading</span>
-            <span>Timed sets</span>
+
+          <div className="battle-speed-card">
+            <span className="battle-speed-icon"><Rocket size={18} aria-hidden="true" /></span>
+            <div><strong>Speed round next</strong><small>First correct answer earns the bonus.</small></div>
+            <span className="battle-speed-prize">+10 <small>ELO</small></span>
           </div>
-          <div className="score-card-actions">
-            <button onClick={onPlayArena}>Continue battle <ChevronRight size={15} /></button>
-            <span><Clock3 size={15} /> 42m</span>
-          </div>
-          <div className="score-card-footer">
-            <span>Next mock · Saturday</span>
-            <span>14-day streak</span>
-          </div>
-        </section>
+
+          <footer className="battle-live-footer">
+            <span><Users size={15} aria-hidden="true" /> 4 players</span>
+            <span><Clock3 size={15} aria-hidden="true" /> 15 sec per question</span>
+          </footer>
+        </article>
       </div>
     </section>
   );
@@ -2639,7 +2629,7 @@ function FeatureCardsShowcase() {
     {
       tag: "practice.engine",
       title: "Targeted SAT modules",
-      lines: ["Question Bank split by SAT domains", "Math + Reading & Writing modules", "Difficulty colors for smarter practice"],
+      lines: ["Question Bank split by SAT domains", "Math + Reading & Writing modules", "Difficulty levels for smarter practice"],
     },
     {
       tag: "review.loop",
@@ -2671,7 +2661,7 @@ function FeatureCardsShowcase() {
             <h3>{card.title}</h3>
             <div className="code-editor">
               <pre>
-                <code>{card.lines.map((line) => `? ${line}`).join("\n")}</code>
+                <code>{card.lines.join("\n")}</code>
               </pre>
             </div>
           </article>
