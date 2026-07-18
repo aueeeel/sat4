@@ -32,7 +32,7 @@
   Video,
   X,
 } from "lucide-react";
-import { CSSProperties, FormEvent, PointerEvent as ReactPointerEvent, ReactNode, useEffect, useMemo, useState } from "react";
+import { CSSProperties, FormEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactNode, useEffect, useMemo, useState } from "react";
 import { questions, sourceNote } from "./data/questions";
 import vocabularyData from "./data/vocabulary.json";
 import {
@@ -122,6 +122,28 @@ const shuffleVocabulary = <T,>(items: T[]) => [...items]
   .sort((a, b) => a.order - b.order)
   .map(({ item }) => item);
 const difficulties: Array<Difficulty | "All"> = ["All", "Easy", "Medium", "Hard"];
+type PracticeHistoryFilter = "All" | "Unanswered" | "Incorrect";
+type PracticeQuestionLimit = 10 | 20 | 40 | "All";
+type HighlightTone = "yellow" | "mint" | "pink";
+type PracticeHighlight = { text: string; tone: HighlightTone };
+
+function HighlightedText({ text, highlights }: { text: string; highlights: PracticeHighlight[] }) {
+  const applicable = highlights
+    .filter((highlight) => highlight.text.length > 1 && text.toLowerCase().includes(highlight.text.toLowerCase()))
+    .sort((a, b) => b.text.length - a.text.length);
+  if (!applicable.length) return <>{text}</>;
+
+  const escaped = applicable.map((highlight) => highlight.text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const parts = text.split(new RegExp(`(${escaped.join("|")})`, "gi"));
+  return (
+    <>
+      {parts.map((part, index) => {
+        const match = applicable.find((highlight) => highlight.text.toLowerCase() === part.toLowerCase());
+        return match ? <mark className={`sat-text-highlight ${match.tone}`} key={`${part}-${index}`}>{part}</mark> : part;
+      })}
+    </>
+  );
+}
 
 const unique = (items: string[]) => Array.from(new Set(items));
 const domainKey = (question: Pick<Question, "section" | "domain">) => `${question.section}::${question.domain}`;
@@ -515,6 +537,22 @@ export default function App() {
   const [studyDockMinimized, setStudyDockMinimized] = useState(false);
   const [openExplanationIds, setOpenExplanationIds] = useState<string[]>([]);
   const [practiceMode, setPracticeMode] = useState(false);
+  const [selectedTopicKeys, setSelectedTopicKeys] = useState<string[]>([]);
+  const [practiceQuestionIds, setPracticeQuestionIds] = useState<string[]>([]);
+  const [topicFiltersOpen, setTopicFiltersOpen] = useState(false);
+  const [topicOptionsOpen, setTopicOptionsOpen] = useState(false);
+  const [practiceHistoryFilter, setPracticeHistoryFilter] = useState<PracticeHistoryFilter>("All");
+  const [practiceQuestionLimit, setPracticeQuestionLimit] = useState<PracticeQuestionLimit>("All");
+  const [practiceShuffle, setPracticeShuffle] = useState(true);
+  const [topicBuilderMessage, setTopicBuilderMessage] = useState("");
+  const [highlightToolOpen, setHighlightToolOpen] = useState(false);
+  const [highlightTone, setHighlightTone] = useState<HighlightTone>("yellow");
+  const [questionHighlights, setQuestionHighlights] = useState<Record<string, PracticeHighlight[]>>({});
+  const [referenceOpen, setReferenceOpen] = useState(false);
+  const [moreToolsOpen, setMoreToolsOpen] = useState(false);
+  const [practiceTextScale, setPracticeTextScale] = useState<"standard" | "large">("standard");
+  const [lineFocusEnabled, setLineFocusEnabled] = useState(false);
+  const [lineFocusY, setLineFocusY] = useState(360);
   const [calculatorOpen, setCalculatorOpen] = useState(false);
   const [calculatorDragging, setCalculatorDragging] = useState(false);
   const [calculatorFrame, setCalculatorFrame] = useState({ x: 920, y: 92, width: 430, height: 540 });
@@ -572,6 +610,13 @@ export default function App() {
   }, [activeDomain, activeSection]);
 
   const filteredQuestions = useMemo(() => {
+    if (practiceMode && practiceQuestionIds.length > 0) {
+      const questionById = new Map(questions.map((question) => [question.id, question]));
+      return practiceQuestionIds
+        .map((questionId) => questionById.get(questionId))
+        .filter((question): question is Question => Boolean(question));
+    }
+
     const normalizedQuery = query.trim().toLowerCase();
     return questions.filter((question) => {
       const matchesSection = question.section === activeSection;
@@ -583,7 +628,7 @@ export default function App() {
         [question.prompt, question.domain, question.skill].some((value) => value.toLowerCase().includes(normalizedQuery));
       return matchesSection && matchesDomain && matchesSkill && matchesDifficulty && matchesQuery;
     });
-  }, [activeDifficulty, activeDomain, activeSection, activeSkill, query]);
+  }, [activeDifficulty, activeDomain, activeSection, activeSkill, practiceMode, practiceQuestionIds, query]);
 
   const activeQuestion = filteredQuestions.find((question) => question.id === activeQuestionId) ?? filteredQuestions[0] ?? null;
   const activeAnswer = activeQuestion ? answerMap.get(activeQuestion.id) : undefined;
@@ -645,6 +690,60 @@ export default function App() {
   const totalAnswered = currentAnswers.length;
   const totalCorrect = currentAnswers.filter((answer) => answer.correct).length;
   const totalAccuracy = totalAnswered ? Math.round((totalCorrect / totalAnswered) * 100) : 0;
+  const totalQuestionCount = currentQuestionIds.size;
+  const overallProgressPercent = totalQuestionCount ? Math.round((totalAnswered / totalQuestionCount) * 100) : 0;
+  const incorrectQuestions = useMemo(
+    () => questions
+      .filter((question) => answerMap.has(question.id) && !answerMap.get(question.id)?.correct)
+      .sort((a, b) => {
+        const aTime = answerMap.get(a.id)?.answeredAt ?? "";
+        const bTime = answerMap.get(b.id)?.answeredAt ?? "";
+        return bTime.localeCompare(aTime);
+      }),
+    [answerMap]
+  );
+  const mistakePracticeQuestions = useMemo(() => {
+    if (!incorrectQuestions.length) return [];
+    const mistakeSkills = new Set(incorrectQuestions.map((question) => `${question.section}::${question.skill}`));
+    const incorrectIds = new Set(incorrectQuestions.map((question) => question.id));
+    const relatedQuestions = questions
+      .filter((question) => mistakeSkills.has(`${question.section}::${question.skill}`) && !incorrectIds.has(question.id))
+      .sort((a, b) => Number(answerMap.has(a.id)) - Number(answerMap.has(b.id)));
+    const practicePool = [...relatedQuestions, ...incorrectQuestions];
+    return practicePool.filter((question, index) => practicePool.findIndex((item) => item.id === question.id) === index).slice(0, 12);
+  }, [answerMap, incorrectQuestions]);
+  const mistakeSkillCount = new Set(incorrectQuestions.map((question) => `${question.section}::${question.skill}`)).size;
+  const scorePrediction = useMemo(() => {
+    const answeredQuestions = questions
+      .map((question) => ({ question, answer: answerMap.get(question.id) }))
+      .filter((entry): entry is { question: Question; answer: AnswerRecord } => Boolean(entry.answer));
+    if (!answeredQuestions.length) return null;
+
+    const difficultyWeights: Record<Difficulty, number> = { Easy: 0.85, Medium: 1, Hard: 1.2 };
+    let possible = 0;
+    let earned = 0;
+    const paceSamples: number[] = [];
+    answeredQuestions.forEach(({ question, answer }) => {
+      const weight = difficultyWeights[question.difficulty];
+      possible += weight;
+      if (answer.correct) earned += weight;
+      if (answer.elapsedSeconds && question.estimatedTimeSeconds) {
+        paceSamples.push(answer.elapsedSeconds / question.estimatedTimeSeconds);
+      }
+    });
+    const mastery = possible ? earned / possible : 0;
+    const averagePace = paceSamples.length ? paceSamples.reduce((sum, value) => sum + value, 0) / paceSamples.length : 1;
+    const paceAdjustment = Math.max(-0.04, Math.min(0.04, (1 - averagePace) * 0.05));
+    const estimated = Math.max(400, Math.min(1600, Math.round((400 + 1200 * Math.max(0, Math.min(1, mastery + paceAdjustment))) / 10) * 10));
+    const range = Math.max(40, Math.round((170 - Math.min(answeredQuestions.length, 26) * 5) / 10) * 10);
+    return {
+      estimated,
+      low: Math.max(400, estimated - range),
+      high: Math.min(1600, estimated + range),
+      confidence: answeredQuestions.length >= 24 ? "High confidence" : answeredQuestions.length >= 12 ? "Building confidence" : "Early estimate",
+      sampleSize: answeredQuestions.length,
+    };
+  }, [answerMap]);
   const practiceTimer = formatTimer(Math.floor((currentTime - practiceStartedAt) / 1000));
 
   const applyEloDelta = (delta: number) => {
@@ -691,6 +790,25 @@ export default function App() {
       modules: mathModules[domain] ?? [],
     }));
   }, [activeSection]);
+
+  const topicBuilderQuestions = useMemo(() => {
+    const selectedKeys = new Set(selectedTopicKeys);
+    return questions.filter((question) => {
+      if (question.section !== activeSection) return false;
+      if (selectedKeys.size > 0 && !selectedKeys.has(topicKey(question))) return false;
+      if (activeDifficulty !== "All" && question.difficulty !== activeDifficulty) return false;
+
+      const answer = answerMap.get(question.id);
+      if (practiceHistoryFilter === "Unanswered" && answer) return false;
+      if (practiceHistoryFilter === "Incorrect" && (!answer || answer.correct)) return false;
+      return true;
+    });
+  }, [activeDifficulty, activeSection, answerMap, practiceHistoryFilter, selectedTopicKeys]);
+
+  const plannedQuestionCount =
+    practiceQuestionLimit === "All"
+      ? topicBuilderQuestions.length
+      : Math.min(practiceQuestionLimit, topicBuilderQuestions.length);
 
   const domainStats = unique(questions.map((question) => question.domain)).map((domain) => {
     const domainQuestions = questions.filter((question) => question.domain === domain);
@@ -746,6 +864,7 @@ export default function App() {
       selectedIndex: choiceIndex,
       correct,
       answeredAt: new Date().toISOString(),
+      elapsedSeconds: Math.max(1, Math.round((Date.now() - practiceStartedAt) / 1000)),
     };
     setSelectedIndex(choiceIndex);
     if (!correct) {
@@ -783,6 +902,7 @@ export default function App() {
       freeResponse: freeResponseValue.trim(),
       correct,
       answeredAt: new Date().toISOString(),
+      elapsedSeconds: Math.max(1, Math.round((Date.now() - practiceStartedAt) / 1000)),
     };
     setSelectedIndex(0);
     if (correct && !activeAnswer?.correct) applyEloDelta(1);
@@ -795,6 +915,11 @@ export default function App() {
     setActiveDomain("All");
     setActiveSkill("All");
     setActiveDifficulty("All");
+    setSelectedTopicKeys([]);
+    setPracticeQuestionIds([]);
+    setTopicBuilderMessage("");
+    setTopicFiltersOpen(false);
+    setTopicOptionsOpen(false);
     const firstQuestion = questions.find((question) => question.section === section);
     if (firstQuestion) setActiveQuestionId(firstQuestion.id);
     setSelectedIndex(null);
@@ -831,22 +956,116 @@ export default function App() {
     setFreeResponseValue("");
   };
 
-  const startPractice = (section: Section, domain = "All", skill = "All") => {
-    const sessionQuestions = getQuestionSet(section, domain, skill);
+  const toggleTopicSelection = (key: string) => {
+    setSelectedTopicKeys((current) =>
+      current.includes(key) ? current.filter((item) => item !== key) : [...current, key]
+    );
+    setTopicBuilderMessage("");
+  };
+
+  const toggleDomainSelection = (domain: string, modules: string[]) => {
+    const keys = modules
+      .filter((module) => getQuestionSet(activeSection, domain, module).length > 0)
+      .map((module) => `${activeSection}::${domain}::${module}`);
+    if (!keys.length) return;
+    const allSelected = keys.every((key) => selectedTopicKeys.includes(key));
+    setSelectedTopicKeys((current) => {
+      const currentSet = new Set(current);
+      keys.forEach((key) => (allSelected ? currentSet.delete(key) : currentSet.add(key)));
+      return [...currentSet];
+    });
+    setTopicBuilderMessage("");
+  };
+
+  const capturePracticeHighlight = (event: ReactMouseEvent<HTMLElement>) => {
+    if (!highlightToolOpen || !activeQuestion) return;
+    const selection = window.getSelection();
+    const selectedText = selection?.toString().replace(/\s+/g, " ").trim() ?? "";
+    if (!selectedText || selectedText.length < 2 || selectedText.length > 240 || !selection?.anchorNode) return;
+    if (!event.currentTarget.contains(selection.anchorNode)) return;
+
+    setQuestionHighlights((current) => {
+      const existing = current[activeQuestion.id] ?? [];
+      const withoutDuplicate = existing.filter((highlight) => highlight.text.toLowerCase() !== selectedText.toLowerCase());
+      return { ...current, [activeQuestion.id]: [...withoutDuplicate, { text: selectedText, tone: highlightTone }] };
+    });
+    selection.removeAllRanges();
+  };
+
+  const resetPracticeView = () => {
+    setPracticeTextScale("standard");
+    setLineFocusEnabled(false);
+    setHighlightToolOpen(false);
+    setReferenceOpen(false);
+    setQuestionHighlights((current) => activeQuestion ? { ...current, [activeQuestion.id]: [] } : current);
+  };
+
+  const launchGuidedPractice = (sessionQuestions: Question[]) => {
     const firstQuestion = sessionQuestions[0];
     if (!firstQuestion) return;
-
-    setActiveSection(section);
-    setActiveDomain(domain);
-    setActiveSkill(skill);
+    setActiveSection(firstQuestion.section);
+    setActiveDomain("All");
+    setActiveSkill("All");
     setActiveDifficulty("All");
     setQuery("");
+    setPracticeQuestionIds(sessionQuestions.map((question) => question.id));
     setActiveQuestionId(firstQuestion.id);
     setSelectedIndex(answerMap.get(firstQuestion.id)?.selectedIndex ?? null);
     setFreeResponseValue(answerMap.get(firstQuestion.id)?.freeResponse ?? "");
     setCalculatorOpen(false);
     setPracticeStartedAt(Date.now());
     setCurrentTime(Date.now());
+    setPracticeMode(true);
+  };
+
+  const reviewSingleQuestion = (question: Question) => launchGuidedPractice([question]);
+
+  const startMistakesPractice = () => launchGuidedPractice(mistakePracticeQuestions);
+
+  const startScoreDiagnostic = () => {
+    const diagnosticQuestions = sections.flatMap((section) => {
+      const sectionQuestions = questions
+        .filter((question) => question.section === section)
+        .sort((a, b) => Number(answerMap.has(a.id)) - Number(answerMap.has(b.id)));
+      const balanced = (["Easy", "Medium", "Hard"] as Difficulty[]).flatMap((difficulty) =>
+        sectionQuestions.filter((question) => question.difficulty === difficulty).slice(0, 4)
+      );
+      const selectedIds = new Set(balanced.map((question) => question.id));
+      const fill = sectionQuestions.filter((question) => !selectedIds.has(question.id)).slice(0, Math.max(0, 12 - balanced.length));
+      return [...balanced, ...fill].slice(0, 12);
+    });
+    launchGuidedPractice(diagnosticQuestions);
+  };
+
+  const startSelectedPractice = () => {
+    let sessionQuestions = [...topicBuilderQuestions];
+    if (practiceShuffle) {
+      sessionQuestions = sessionQuestions
+        .map((question) => ({ question, order: Math.random() }))
+        .sort((a, b) => a.order - b.order)
+        .map(({ question }) => question);
+    }
+    if (practiceQuestionLimit !== "All") {
+      sessionQuestions = sessionQuestions.slice(0, practiceQuestionLimit);
+    }
+
+    const firstQuestion = sessionQuestions[0];
+    if (!firstQuestion) {
+      setTopicBuilderMessage("No questions match these filters yet. Try widening your selection.");
+      return;
+    }
+
+    setActiveDomain("All");
+    setActiveSkill("All");
+    setQuery("");
+    setPracticeQuestionIds(sessionQuestions.map((question) => question.id));
+    setActiveQuestionId(firstQuestion.id);
+    setSelectedIndex(answerMap.get(firstQuestion.id)?.selectedIndex ?? null);
+    setFreeResponseValue(answerMap.get(firstQuestion.id)?.freeResponse ?? "");
+    setCalculatorOpen(false);
+    setPracticeStartedAt(Date.now());
+    setCurrentTime(Date.now());
+    setTopicBuilderMessage("");
     setPracticeMode(true);
   };
 
@@ -1094,15 +1313,27 @@ export default function App() {
   if (practiceMode && activeQuestion && activePrompt) {
     const isMathPractice = activeQuestion.section === "Math";
     const isFreeResponse = activeQuestion.choices.length === 1 && activeQuestion.correctIndex === 0 && activeQuestion.acceptedAnswers?.length;
+    const activeHighlights = questionHighlights[activeQuestion.id] ?? [];
+    const practiceShellClass = [
+      "practice-shell",
+      isMathPractice ? "math-practice-shell" : "",
+      practiceTextScale === "large" ? "practice-large-text" : "",
+      highlightToolOpen ? "highlight-mode" : "",
+    ].filter(Boolean).join(" ");
 
     return (
-      <main className={isMathPractice ? "practice-shell math-practice-shell" : "practice-shell"}>
+      <main className={practiceShellClass}>
         <header className="sat-topbar">
           <button
             className="sat-back"
             onClick={() => {
               setCalculatorOpen(false);
+              setHighlightToolOpen(false);
+              setReferenceOpen(false);
+              setMoreToolsOpen(false);
+              setLineFocusEnabled(false);
               setPracticeMode(false);
+              setPracticeQuestionIds([]);
             }}
           >
             <ChevronLeft size={16} />
@@ -1115,7 +1346,15 @@ export default function App() {
             </button>
           </div>
           <div className="sat-tools">
-            <button>
+            <button
+              className={highlightToolOpen ? "active" : ""}
+              aria-expanded={highlightToolOpen}
+              onClick={() => {
+                setHighlightToolOpen((open) => !open);
+                setReferenceOpen(false);
+                setMoreToolsOpen(false);
+              }}
+            >
               <Highlighter size={15} />
               Highlight
             </button>
@@ -1125,18 +1364,96 @@ export default function App() {
                   <Calculator size={15} />
                   Calculator
                 </button>
-                <button>
+                <button
+                  className={referenceOpen ? "active" : ""}
+                  aria-expanded={referenceOpen}
+                  onClick={() => {
+                    setReferenceOpen((open) => !open);
+                    setHighlightToolOpen(false);
+                    setMoreToolsOpen(false);
+                  }}
+                >
                   <FileText size={15} />
                   Reference
                 </button>
               </>
             )}
-            <button>
+            <button
+              className={moreToolsOpen ? "active" : ""}
+              aria-expanded={moreToolsOpen}
+              onClick={() => {
+                setMoreToolsOpen((open) => !open);
+                setHighlightToolOpen(false);
+                setReferenceOpen(false);
+              }}
+            >
               <MoreHorizontal size={17} />
               More
             </button>
           </div>
         </header>
+
+        {highlightToolOpen && (
+          <aside className="sat-tool-popover sat-highlight-popover" aria-label="Highlight tool">
+            <header><Highlighter size={16} /><strong>Highlight</strong></header>
+            <p>Select text in the passage, question, or answers to highlight it.</p>
+            <div className="sat-highlight-tones" role="group" aria-label="Highlight color">
+              {(["yellow", "mint", "pink"] as HighlightTone[]).map((tone) => (
+                <button key={tone} className={`${tone}${highlightTone === tone ? " active" : ""}`} aria-pressed={highlightTone === tone} onClick={() => setHighlightTone(tone)}>
+                  <span />{tone}
+                </button>
+              ))}
+            </div>
+            <button
+              className="sat-tool-secondary"
+              disabled={!activeHighlights.length}
+              onClick={() => setQuestionHighlights((current) => ({ ...current, [activeQuestion.id]: [] }))}
+            >
+              Remove highlights ({activeHighlights.length})
+            </button>
+          </aside>
+        )}
+
+        {moreToolsOpen && (
+          <aside className="sat-tool-popover sat-more-popover" aria-label="Reading settings">
+            <header><MoreHorizontal size={17} /><strong>Reading settings</strong></header>
+            <div className="sat-tool-setting">
+              <span>Text size</span>
+              <div className="sat-tool-segmented" role="group" aria-label="Text size">
+                <button className={practiceTextScale === "standard" ? "active" : ""} onClick={() => setPracticeTextScale("standard")}>Standard</button>
+                <button className={practiceTextScale === "large" ? "active" : ""} onClick={() => setPracticeTextScale("large")}>Large</button>
+              </div>
+            </div>
+            <button className="sat-tool-toggle" aria-pressed={lineFocusEnabled} onClick={() => setLineFocusEnabled((enabled) => !enabled)}>
+              <span><strong>Line focus</strong><small>Dim the page outside your reading line</small></span>
+              <i><span /></i>
+            </button>
+            <button className="sat-tool-secondary" onClick={resetPracticeView}><RotateCcw size={14} /> Reset question view</button>
+          </aside>
+        )}
+
+        {isMathPractice && referenceOpen && (
+          <aside className="sat-reference-panel" aria-label="SAT math reference sheet">
+            <header>
+              <div><FileText size={17} /><strong>Reference sheet</strong></div>
+              <button onClick={() => setReferenceOpen(false)} aria-label="Close reference sheet"><X size={17} /></button>
+            </header>
+            <p>The following formulas are provided on the digital SAT.</p>
+            <div className="sat-formula-grid">
+              <article><span>Circle</span><strong>A = πr²</strong><strong>C = 2πr</strong></article>
+              <article><span>Rectangle</span><strong>A = ℓw</strong></article>
+              <article><span>Triangle</span><strong>A = ½bh</strong></article>
+              <article><span>Right triangle</span><strong>c² = a² + b²</strong></article>
+              <article><span>Rectangular prism</span><strong>V = ℓwh</strong></article>
+              <article><span>Cylinder</span><strong>V = πr²h</strong></article>
+              <article><span>Sphere</span><strong>V = ⁴⁄₃πr³</strong></article>
+              <article><span>Cone</span><strong>V = ⅓πr²h</strong></article>
+            </div>
+            <small>The number of degrees of arc in a circle is 360. The sum of the angles of a triangle is 180°.</small>
+          </aside>
+        )}
+
+        {lineFocusEnabled && <div className="sat-line-focus" aria-hidden="true" style={{ top: lineFocusY - 42 }} />}
 
         {isMathPractice && calculatorOpen && (
           <aside
@@ -1164,7 +1481,11 @@ export default function App() {
           </aside>
         )}
 
-        <section className={isMathPractice ? "sat-stage math-stage" : "sat-stage"}>
+        <section
+          className={isMathPractice ? "sat-stage math-stage" : "sat-stage"}
+          onMouseUp={capturePracticeHighlight}
+          onPointerMove={(event) => lineFocusEnabled && setLineFocusY(event.clientY)}
+        >
           {!isMathPractice && (
             <article className="sat-reading-pane">
               {activeQuestion.imagePath && (
@@ -1173,7 +1494,7 @@ export default function App() {
               {activePrompt.passage ? (
                 <div className="sat-passage">
                   {activePrompt.passage.split(/\n+/).map((paragraph, index) => (
-                    <p key={`${activeQuestion.id}-passage-${index}`}>{paragraph}</p>
+                    <p key={`${activeQuestion.id}-passage-${index}`}><HighlightedText text={paragraph} highlights={activeHighlights} /></p>
                   ))}
                 </div>
               ) : (
@@ -1202,7 +1523,9 @@ export default function App() {
               {isMathPractice && activeQuestion.imagePath && (
                 <img className="question-image sat-question-image" src={activeQuestion.imagePath} alt="SAT math question" />
               )}
-              {!activeQuestion.imagePath && <p className="sat-question-text">{activePrompt.questionText}</p>}
+              {!activeQuestion.imagePath && (
+                <p className="sat-question-text"><HighlightedText text={activePrompt.questionText} highlights={activeHighlights} /></p>
+              )}
 
               {isFreeResponse ? (
                 <div className={activeAnswer ? (activeAnswer.correct ? "sat-free-response correct" : "sat-free-response wrong") : "sat-free-response"}>
@@ -1237,12 +1560,12 @@ export default function App() {
                           isWrongAttempt ? "wrong" : "",
                         ].join(" ")}
                       >
-                        <button className="sat-choice-main" onClick={() => setSelectedIndex(index)}>
+                        <button className="sat-choice-main" onClick={() => !highlightToolOpen && setSelectedIndex(index)}>
                           <span>{String.fromCharCode(65 + index)}</span>
                           {choiceImage && choice.startsWith("Choice ") ? (
                             <img className="sat-choice-image" src={choiceImage} alt={`Choice ${String.fromCharCode(65 + index)}`} />
                           ) : (
-                            <em>{choice}</em>
+                            <em><HighlightedText text={choice} highlights={activeHighlights} /></em>
                           )}
                           {showCorrect && <Check size={18} />}
                           {isWrongAttempt && <X size={18} />}
@@ -1257,6 +1580,12 @@ export default function App() {
                       </div>
                     );
                   })}
+                </div>
+              )}
+
+              {!isFreeResponse && selectedIndex !== null && !activeAnswer?.correct && selectedIndex !== activeAnswer?.selectedIndex && (
+                <div className="sat-inline-check">
+                  <button onClick={() => submitAnswer(activeQuestion, selectedIndex)}>Check answer</button>
                 </div>
               )}
 
@@ -1365,7 +1694,6 @@ export default function App() {
               label: "Question Bank",
               icon: <LibraryBig size={17} />,
               active: bankView === "bank" || bankView === "topics",
-              badge: String(sectionStats.find((stat) => stat.section === activeSection)?.answered ?? 0),
               onClick: () => {
                 setBankView("bank");
                 window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1503,20 +1831,29 @@ export default function App() {
             />
 
             <FeatureCardsShowcase />
+
           </div>
         </>
       ) : bankView === "bank" ? (
           <section id="bank" className="question-bank-home">
             <div className="bank-title">
-              <LibraryBig size={24} />
+              <span>Practice library</span>
               <h2>Question Bank</h2>
+              <p>Choose a section, build a focused set, or continue from your recent work.</p>
             </div>
             <div className="bank-cards">
               {sectionStats.map((stat) => (
                 <article key={stat.section} className={`bank-card ${stat.section === "Verbal" ? "reading" : "math"}`}>
-                  <div>
+                  <div className="bank-card-icon" aria-hidden="true">
+                    {stat.section === "Verbal" ? <BookOpenCheck size={21} /> : <Calculator size={21} />}
+                  </div>
+                  <div className="bank-card-copy">
+                    <span>{stat.section === "Verbal" ? "Reading & language" : "Quantitative reasoning"}</span>
                     <h3>{sectionLabel(stat.section)}</h3>
-                    <p>{stat.total} questions</p>
+                    <p>{stat.answered.toLocaleString()} completed · {stat.total.toLocaleString()} available</p>
+                    <div className="bank-card-progress" aria-label={`${stat.total ? Math.round((stat.answered / stat.total) * 100) : 0}% of ${sectionLabel(stat.section)} completed`}>
+                      <span style={{ width: `${stat.total ? Math.round((stat.answered / stat.total) * 100) : 0}%` }} />
+                    </div>
                   </div>
                   <button
                     onClick={() => {
@@ -1525,12 +1862,76 @@ export default function App() {
                       window.scrollTo({ top: 0, behavior: "smooth" });
                     }}
                   >
-                    Open
+                    Practice
                     <ChevronRight size={14} />
                   </button>
                 </article>
               ))}
             </div>
+            <section className="bank-overview" aria-label="Question bank progress overview">
+              <article className="bank-metric-card">
+                <header><ClipboardCheck size={17} /><span>Completed</span></header>
+                <strong>{totalAnswered.toLocaleString()}</strong>
+                <p>{overallProgressPercent}% of the full question bank</p>
+                <div className="bank-metric-track"><span style={{ width: `${overallProgressPercent}%` }} /></div>
+              </article>
+              <article className="bank-metric-card accuracy">
+                <header><BarChart3 size={17} /><span>Accuracy</span></header>
+                <strong>{totalAnswered ? `${totalAccuracy}%` : "—"}</strong>
+                <p>{totalAnswered ? `${totalCorrect.toLocaleString()} of ${totalAnswered.toLocaleString()} correct` : "Answer your first question to begin"}</p>
+                <div className="bank-metric-track"><span style={{ width: `${totalAccuracy}%` }} /></div>
+              </article>
+              <article className="bank-metric-card predictor">
+                <header><Gauge size={17} /><span>Score predictor</span></header>
+                <div className="bank-predicted-score">
+                  <strong>{scorePrediction?.estimated ?? "—"}</strong>
+                  {scorePrediction && <span>{scorePrediction.low}–{scorePrediction.high}</span>}
+                </div>
+                <p>{scorePrediction ? `${scorePrediction.confidence} · ${scorePrediction.sampleSize} questions` : "Complete a short diagnostic for your estimate"}</p>
+                <button onClick={startScoreDiagnostic}>{scorePrediction ? "Refine estimate" : "Start diagnostic"}<ChevronRight size={14} /></button>
+              </article>
+              <article className="bank-error-log">
+                <header>
+                  <div>
+                    <span>Error log</span>
+                    <h3>Questions to revisit</h3>
+                  </div>
+                  <strong>{incorrectQuestions.length}</strong>
+                </header>
+                {incorrectQuestions.length ? (
+                  <div className="bank-error-list">
+                    {incorrectQuestions.slice(0, 5).map((question) => (
+                      <button key={question.id} onClick={() => reviewSingleQuestion(question)}>
+                        <span className={`bank-error-difficulty ${question.difficulty.toLowerCase()}`}>{question.difficulty}</span>
+                        <span><strong>{question.skill}</strong><small>{sectionLabel(question.section)} · {question.domain}</small></span>
+                        <ChevronRight size={16} />
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="bank-error-empty">
+                    <Check size={18} />
+                    <span><strong>No errors yet</strong><small>Incorrect answers will appear here for quick review.</small></span>
+                  </div>
+                )}
+              </article>
+              <article className="bank-mistakes-practice">
+                <div className="bank-mistakes-icon"><RotateCcw size={20} /></div>
+                <div className="bank-mistakes-copy">
+                  <span>Adaptive review</span>
+                  <h3>Mistakes Practice</h3>
+                  <p>
+                    {incorrectQuestions.length
+                      ? `A focused set of ${mistakePracticeQuestions.length} questions across ${mistakeSkillCount} ${mistakeSkillCount === 1 ? "skill" : "skills"} where you need more consistency.`
+                      : "Your personalized practice set will appear after your first incorrect answer."}
+                  </p>
+                </div>
+                <button disabled={!mistakePracticeQuestions.length} onClick={startMistakesPractice}>
+                  {mistakePracticeQuestions.length ? "Practice weak skills" : "No mistakes yet"}
+                  {mistakePracticeQuestions.length > 0 && <ChevronRight size={15} />}
+                </button>
+              </article>
+            </section>
           </section>
       ) : (
         <section id="topics" className="topic-page">
@@ -1547,26 +1948,152 @@ export default function App() {
 
           <div className="topic-board">
             <div className="topic-toolbar">
-              <h2>{sectionLabel(activeSection)}</h2>
+              <div>
+                <h2>{sectionLabel(activeSection)}</h2>
+                <p>Choose one or more skills, then shape your practice session.</p>
+              </div>
               <div className="topic-actions">
-                <button>
+                <button
+                  className={topicFiltersOpen ? "active" : ""}
+                  aria-expanded={topicFiltersOpen}
+                  aria-controls="topic-filter-panel"
+                  onClick={() => {
+                    setTopicFiltersOpen((open) => !open);
+                    setTopicOptionsOpen(false);
+                  }}
+                >
                   <SlidersHorizontal size={14} />
                   Filters
+                  {Number(activeDifficulty !== "All") + Number(practiceHistoryFilter !== "All") > 0 && (
+                    <span className="topic-action-count">
+                      {Number(activeDifficulty !== "All") + Number(practiceHistoryFilter !== "All")}
+                    </span>
+                  )}
                 </button>
-                <button>
+                <button
+                  className={topicOptionsOpen ? "active" : ""}
+                  aria-expanded={topicOptionsOpen}
+                  aria-controls="topic-options-panel"
+                  onClick={() => {
+                    setTopicOptionsOpen((open) => !open);
+                    setTopicFiltersOpen(false);
+                  }}
+                >
                   <MoreHorizontal size={15} />
                   More options
                 </button>
               </div>
             </div>
 
+            {topicFiltersOpen && (
+              <section id="topic-filter-panel" className="topic-config-panel" aria-label="Practice filters">
+                <header>
+                  <div>
+                    <strong>Filter your question set</strong>
+                    <span>These filters apply when you start the next practice session.</span>
+                  </div>
+                  <button
+                    className="topic-config-reset"
+                    onClick={() => {
+                      setActiveDifficulty("All");
+                      setPracticeHistoryFilter("All");
+                    }}
+                  >
+                    Reset
+                  </button>
+                </header>
+                <div className="topic-config-grid">
+                  <div className="topic-config-field">
+                    <span>Difficulty</span>
+                    <div className="topic-segmented-control" role="group" aria-label="Question difficulty">
+                      {difficulties.map((difficulty) => (
+                        <button
+                          key={difficulty}
+                          className={activeDifficulty === difficulty ? "active" : ""}
+                          aria-pressed={activeDifficulty === difficulty}
+                          onClick={() => setActiveDifficulty(difficulty)}
+                        >
+                          {difficulty}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="topic-config-field">
+                    <span>Question history</span>
+                    <div className="topic-segmented-control" role="group" aria-label="Question history">
+                      {(["All", "Unanswered", "Incorrect"] as PracticeHistoryFilter[]).map((filter) => (
+                        <button
+                          key={filter}
+                          className={practiceHistoryFilter === filter ? "active" : ""}
+                          aria-pressed={practiceHistoryFilter === filter}
+                          onClick={() => setPracticeHistoryFilter(filter)}
+                        >
+                          {filter}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {topicOptionsOpen && (
+              <section id="topic-options-panel" className="topic-config-panel" aria-label="Practice options">
+                <header>
+                  <div>
+                    <strong>Session preferences</strong>
+                    <span>Keep the session focused and comfortable for you.</span>
+                  </div>
+                </header>
+                <div className="topic-config-grid">
+                  <div className="topic-config-field">
+                    <span>Questions per session</span>
+                    <div className="topic-segmented-control" role="group" aria-label="Questions per session">
+                      {([10, 20, 40, "All"] as PracticeQuestionLimit[]).map((limit) => (
+                        <button
+                          key={limit}
+                          className={practiceQuestionLimit === limit ? "active" : ""}
+                          aria-pressed={practiceQuestionLimit === limit}
+                          onClick={() => setPracticeQuestionLimit(limit)}
+                        >
+                          {limit}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="topic-option-toggles">
+                    <button className="topic-toggle-row" aria-pressed={practiceShuffle} onClick={() => setPracticeShuffle((value) => !value)}>
+                      <span><strong>Shuffle questions</strong><small>Mix skills throughout the session</small></span>
+                      <i aria-hidden="true"><span /></i>
+                    </button>
+                    <button className="topic-toggle-row" aria-pressed={!practiceTimerHidden} onClick={() => setPracticeTimerHidden((hidden) => !hidden)}>
+                      <span><strong>Show timer</strong><small>You can still hide it during practice</small></span>
+                      <i aria-hidden="true"><span /></i>
+                    </button>
+                  </div>
+                </div>
+              </section>
+            )}
+
             <article className="practice-all-card">
               <div>
-                <strong>Practice all topics</strong>
-                <span>Start practicing all {groupedTopics.reduce((count, group) => count + group.modules.length, 0)} skills in {sectionLabel(activeSection)}.</span>
+                <strong>{selectedTopicKeys.length ? `${selectedTopicKeys.length} skills selected` : "Practice all topics"}</strong>
+                <span>
+                  {plannedQuestionCount} {plannedQuestionCount === 1 ? "question" : "questions"} ready
+                  {activeDifficulty !== "All" ? ` · ${activeDifficulty}` : ""}
+                  {practiceHistoryFilter !== "All" ? ` · ${practiceHistoryFilter.toLowerCase()}` : ""}
+                </span>
               </div>
-              <button onClick={() => startPractice(activeSection)}>Start practice</button>
+              <div className="practice-all-actions">
+                {selectedTopicKeys.length > 0 && (
+                  <button className="practice-clear-button" onClick={() => setSelectedTopicKeys([])}>Clear</button>
+                )}
+                <button disabled={plannedQuestionCount === 0} onClick={startSelectedPractice}>
+                  {selectedTopicKeys.length ? "Start selected" : "Start practice"}
+                </button>
+              </div>
             </article>
+            {topicBuilderMessage && <p className="topic-builder-message" role="status">{topicBuilderMessage}</p>}
 
             <div className="topic-table">
               <div className="topic-table-head">
@@ -1574,37 +2101,51 @@ export default function App() {
                 <span>Progress</span>
                 <span>Accuracy</span>
               </div>
-              {groupedTopics.map((group) => (
-                <div className="topic-group" key={group.domain}>
-                  <h3>{group.domain}</h3>
+              {groupedTopics.map((group) => {
+                const availableModules = group.modules.filter((module) => getQuestionSet(activeSection, group.domain, module).length > 0);
+                const groupAvailable = availableModules.length > 0;
+                const groupSelected = groupAvailable && availableModules.every((module) =>
+                  selectedTopicKeys.includes(`${activeSection}::${group.domain}::${module}`)
+                );
+                return (
+                <div className={groupAvailable ? "topic-group" : "topic-group unavailable"} key={group.domain}>
+                  <div className="topic-group-heading">
+                    <h3>{group.domain}</h3>
+                    <button disabled={!groupAvailable} onClick={() => toggleDomainSelection(group.domain, availableModules)}>
+                      {!groupAvailable ? "Not available yet" : groupSelected ? "Clear group" : "Select group"}
+                    </button>
+                  </div>
                   {group.modules.map((module) => {
                     const moduleQuestions = getQuestionSet(activeSection, group.domain, module);
                     const stats = getPracticeStats(moduleQuestions);
                     const progressPercent = stats.total ? Math.round((stats.answered / stats.total) * 100) : 0;
+                    const selectionKey = `${activeSection}::${group.domain}::${module}`;
+                    const selected = selectedTopicKeys.includes(selectionKey);
                     return (
                       <button
                         key={`${group.domain}-${module}`}
-                        className="topic-row-card"
+                        className={selected ? "topic-row-card selected" : "topic-row-card"}
                         disabled={!stats.total}
-                        onClick={() => startPractice(activeSection, group.domain, module)}
+                        aria-pressed={selected}
+                        onClick={() => toggleTopicSelection(selectionKey)}
                       >
                         <span className="topic-name">
-                          <i />
+                          <i>{selected && <Check size={12} strokeWidth={3} />}</i>
                           <strong>{module}</strong>
                         </span>
                         <span className="topic-progress">
                           <span className="mini-progress">
                             <span style={{ width: `${progressPercent}%` }} />
                           </span>
-                          <em>{stats.answered}/{stats.total}</em>
+                          <em>{stats.answered}/{stats.total} solved</em>
                         </span>
                         <span className="topic-accuracy">
                           {stats.accuracy === null ? (
-                            <em>-</em>
+                            <em>No attempts</em>
                           ) : (
                             <>
-                              <i />
                               <strong>{stats.accuracy}%</strong>
+                              <em>{stats.correct}/{stats.answered} correct</em>
                             </>
                           )}
                         </span>
@@ -1612,7 +2153,8 @@ export default function App() {
                     );
                   })}
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </section>
@@ -2190,8 +2732,16 @@ function QuestionBankNavigator({
   onGoTo: (index: number) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [groupAnswered, setGroupAnswered] = useState(false);
   const currentPage = currentIndex + 1;
   const total = questions.length;
+  const indexedQuestions = questions.map((question, index) => ({ question, index }));
+  const questionGroups = groupAnswered
+    ? [
+        { label: "Unanswered", items: indexedQuestions.filter(({ question }) => !answerMap.has(question.id)) },
+        { label: "Answered", items: indexedQuestions.filter(({ question }) => answerMap.has(question.id)) },
+      ].filter((group) => group.items.length > 0)
+    : [{ label: "", items: indexedQuestions }];
 
   return (
     <div className="question-bank-navigator">
@@ -2203,9 +2753,13 @@ function QuestionBankNavigator({
           <header className="question-bank-popover-header">
             <strong>Question Bank</strong>
             <div>
-              <button className="question-bank-mini-button">
+              <button
+                className={groupAnswered ? "question-bank-mini-button active" : "question-bank-mini-button"}
+                aria-pressed={groupAnswered}
+                onClick={() => setGroupAnswered((grouped) => !grouped)}
+              >
                 <SlidersHorizontal size={13} />
-                Group Answered
+                {groupAnswered ? "Grouped" : "Group Answered"}
               </button>
               <button className="question-bank-close" onClick={() => setOpen(false)} aria-label="Close question bank menu">
                 <X size={16} />
@@ -2223,8 +2777,12 @@ function QuestionBankNavigator({
             <span><i className="difficulty-swatch medium" /> Medium</span>
             <span><i className="difficulty-swatch hard" /> Hard</span>
           </div>
-          <div className="question-bank-grid">
-            {questions.map((question, index) => {
+          <div className="question-bank-groups">
+            {questionGroups.map((group) => (
+              <section className="question-bank-grid-group" key={group.label || "all"}>
+                {group.label && <h4>{group.label}<span>{group.items.length}</span></h4>}
+                <div className="question-bank-grid">
+            {group.items.map(({ question, index }) => {
               const answer = answerMap.get(question.id);
               const wrongAttempts = wrongChoices[question.id]?.length ?? 0;
               const correctAfterWrong = Boolean(answer?.correct && wrongAttempts > 0);
@@ -2252,6 +2810,9 @@ function QuestionBankNavigator({
                 </button>
               );
             })}
+                </div>
+              </section>
+            ))}
           </div>
         </section>
       )}

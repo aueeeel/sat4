@@ -24,6 +24,7 @@ export type AnswerRecord = {
   freeResponse?: string;
   correct: boolean;
   answeredAt: string;
+  elapsedSeconds?: number;
 };
 
 export type UserProfile = {
