@@ -32,7 +32,7 @@
   Video,
   X,
 } from "lucide-react";
-import { CSSProperties, FormEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactNode, useEffect, useMemo, useState } from "react";
+import { CSSProperties, FormEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { questions, sourceNote } from "./data/questions";
 import vocabularyData from "./data/vocabulary.json";
 import {
@@ -103,18 +103,38 @@ type VocabularyCard = {
   meaning: string;
   example: string;
   source?: string;
+  difficulty?: VocabularyDifficulty;
 };
 type VocabularyDifficulty = "Easy" | "Medium" | "Hard";
 type VocabularyMode = "flashcards" | "matching" | "sentence" | "library";
 type SentenceFeedback = { status: "success" | "improve"; title: string; message: string };
+type MatchingVine = { key: string; path: string; endX: number; endY: number; tone: "selected" | "matched" | "wrong" };
 
 const vocabularyCards = vocabularyData as VocabularyCard[];
+const SCORE_PREDICTION_MIN_ANSWERS = 40;
 const vocabularyStopWords = new Set(["about", "after", "again", "also", "because", "been", "being", "from", "have", "into", "just", "more", "most", "much", "someone", "something", "that", "their", "there", "these", "they", "this", "through", "very", "what", "when", "where", "which", "while", "with", "without", "your"]);
+const familiarVocabularyWords = new Set([
+  "abrupt", "abstract", "adequate", "apparent", "assert", "boast", "burden", "compel", "content", "deceive",
+  "decree", "deter", "devise", "dilemma", "distinct", "distinguish", "dread", "embrace", "enact", "endorse",
+  "feasible", "hostile", "impose", "innovative", "invoke", "lavish", "merely", "mocking", "novel", "objection",
+  "optimistic", "petty", "prejudice", "prompt", "prospect", "provoke", "proxy", "quarrel", "radical", "recount",
+  "reinforce", "retain", "rigid", "robust", "scorn", "secluded", "skeptical", "sluggish", "spawn", "stimulate",
+  "tangible", "vanity", "viable", "yield", "yearn",
+]);
+const advancedVocabularyWords = new Set([
+  "abject", "admonish", "austere", "broach", "candor", "colloquial", "construe", "demur", "engender", "ephemeral",
+  "equivocal", "exalt", "fetter", "ignominious", "immure", "inexorable", "inefficacious", "mired", "onerous",
+  "paucity", "promulgate", "solicitude", "substantiate", "suffrage", "tumult", "ubiquitous", "vestigial",
+]);
 const getVocabularyDifficulty = (card: VocabularyCard): VocabularyDifficulty => {
-  const wordLength = card.word.replace(/[^a-z]/gi, "").length;
-  const meaningLength = card.meaning.split(/\s+/).length;
-  if (wordLength <= 7 && meaningLength <= 7) return "Easy";
-  if (wordLength >= 11 || meaningLength >= 13) return "Hard";
+  if (card.difficulty) return card.difficulty;
+  const normalizedWord = card.word.toLowerCase().replace(/\s*\([^)]*\)/g, "").replace(/^to\s+/, "").trim();
+  if (advancedVocabularyWords.has(normalizedWord)) return "Hard";
+  if (familiarVocabularyWords.has(normalizedWord)) return "Easy";
+  const letters = normalizedWord.replace(/[^a-z]/g, "");
+  const syllables = Math.max(1, letters.replace(/(?:[^laeiouy]es|ed|[^laeiouy]e)$/i, "").match(/[aeiouy]{1,2}/g)?.length ?? 1);
+  const hasAdvancedForm = /(acious|escence|escent|ficacious|gnomious|iferous|ibility|ious|istic|ization|ological|phobia|tude|uous)$/i.test(letters);
+  if ((letters.length >= 12 && syllables >= 4) || hasAdvancedForm) return "Hard";
   return "Medium";
 };
 const shuffleVocabulary = <T,>(items: T[]) => [...items]
@@ -269,6 +289,26 @@ type PracticePaper = {
   modules: PracticePaperModule[];
 };
 
+type PracticePaperAttempt = {
+  id: string;
+  paperId: string;
+  paperTitle: string;
+  mode: "full" | "module";
+  moduleIndex?: number;
+  label: string;
+  completedAt: string;
+  elapsedSeconds: number;
+  questionIds: string[];
+  selectedAnswers: Record<string, number>;
+  freeAnswers: Record<string, string>;
+  markedForReview: Record<string, boolean>;
+  correct: number;
+  answered: number;
+  total: number;
+  accuracy: number;
+  estimatedScore: number;
+};
+
 type QuestionPickRequest = {
   domain?: string;
   skill?: string;
@@ -281,6 +321,18 @@ const stableQuestionRank = (question: Question) =>
   question.id.split("").reduce((hash, char) => ((hash << 5) - hash + char.charCodeAt(0)) | 0, 0);
 
 const isFreeResponseQuestion = (question: Question) => question.choices.length <= 1;
+
+const isPaperAnswerCorrect = (
+  question: Question,
+  selectedAnswers: Record<string, number>,
+  freeAnswers: Record<string, string>
+) => {
+  if (isFreeResponseQuestion(question)) {
+    const answer = freeAnswers[question.id] ?? "";
+    return parseAcceptedAnswers(question).some((accepted) => answersMatch(answer, accepted));
+  }
+  return selectedAnswers[question.id] === question.correctIndex;
+};
 
 const pickQuestions = (
   section: Section,
@@ -507,6 +559,13 @@ const practicePapers: PracticePaper[] = [
   createFullDigitalSatPracticePaper(),
 ];
 
+const practiceModuleFlowers = [
+  { src: "/practice/flowers/lily-bud.png", name: "Lily" },
+  { src: "/practice/flowers/rose-bud.png", name: "Rose" },
+  { src: "/practice/flowers/tulip-bud.png", name: "Tulip" },
+  { src: "/practice/flowers/iris-bud.png", name: "Iris" },
+];
+
 export default function App() {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => getStoredUser());
   const [authMode, setAuthMode] = useState<"sign-in" | "sign-up">("sign-up");
@@ -691,7 +750,9 @@ export default function App() {
   const totalCorrect = currentAnswers.filter((answer) => answer.correct).length;
   const totalAccuracy = totalAnswered ? Math.round((totalCorrect / totalAnswered) * 100) : 0;
   const totalQuestionCount = currentQuestionIds.size;
-  const overallProgressPercent = totalQuestionCount ? Math.round((totalAnswered / totalQuestionCount) * 100) : 0;
+  const overallProgressPercent = totalQuestionCount && totalAnswered
+    ? Math.max(0.1, Math.round((totalAnswered / totalQuestionCount) * 1000) / 10)
+    : 0;
   const incorrectQuestions = useMemo(
     () => questions
       .filter((question) => answerMap.has(question.id) && !answerMap.get(question.id)?.correct)
@@ -717,7 +778,7 @@ export default function App() {
     const answeredQuestions = questions
       .map((question) => ({ question, answer: answerMap.get(question.id) }))
       .filter((entry): entry is { question: Question; answer: AnswerRecord } => Boolean(entry.answer));
-    if (!answeredQuestions.length) return null;
+    if (answeredQuestions.length < SCORE_PREDICTION_MIN_ANSWERS) return null;
 
     const difficultyWeights: Record<Difficulty, number> = { Easy: 0.85, Medium: 1, Hard: 1.2 };
     let possible = 0;
@@ -740,7 +801,7 @@ export default function App() {
       estimated,
       low: Math.max(400, estimated - range),
       high: Math.min(1600, estimated + range),
-      confidence: answeredQuestions.length >= 24 ? "High confidence" : answeredQuestions.length >= 12 ? "Building confidence" : "Early estimate",
+      confidence: answeredQuestions.length >= 100 ? "High confidence" : answeredQuestions.length >= 60 ? "Building confidence" : "Baseline estimate",
       sampleSize: answeredQuestions.length,
     };
   }, [answerMap]);
@@ -1028,11 +1089,11 @@ export default function App() {
         .filter((question) => question.section === section)
         .sort((a, b) => Number(answerMap.has(a.id)) - Number(answerMap.has(b.id)));
       const balanced = (["Easy", "Medium", "Hard"] as Difficulty[]).flatMap((difficulty) =>
-        sectionQuestions.filter((question) => question.difficulty === difficulty).slice(0, 4)
+        sectionQuestions.filter((question) => question.difficulty === difficulty).slice(0, 6)
       );
       const selectedIds = new Set(balanced.map((question) => question.id));
-      const fill = sectionQuestions.filter((question) => !selectedIds.has(question.id)).slice(0, Math.max(0, 12 - balanced.length));
-      return [...balanced, ...fill].slice(0, 12);
+      const fill = sectionQuestions.filter((question) => !selectedIds.has(question.id)).slice(0, Math.max(0, 20 - balanced.length));
+      return [...balanced, ...fill].slice(0, 20);
     });
     launchGuidedPractice(diagnosticQuestions);
   };
@@ -1791,7 +1852,7 @@ export default function App() {
       ) : bankView === "vocabulary" ? (
         <VocabularyView />
       ) : bankView === "papers" ? (
-        <PracticePapersView />
+        <PracticePapersView currentUser={currentUser} />
       ) : bankView === "home" ? (
         <>
           <section id="dashboard" className="video-hero">
@@ -1843,9 +1904,6 @@ export default function App() {
             <div className="bank-cards">
               {sectionStats.map((stat) => (
                 <article key={stat.section} className={`bank-card ${stat.section === "Verbal" ? "reading" : "math"}`}>
-                  <div className="bank-card-icon" aria-hidden="true">
-                    {stat.section === "Verbal" ? <BookOpenCheck size={21} /> : <Calculator size={21} />}
-                  </div>
                   <div className="bank-card-copy">
                     <span>{stat.section === "Verbal" ? "Reading & language" : "Quantitative reasoning"}</span>
                     <h3>{sectionLabel(stat.section)}</h3>
@@ -1869,24 +1927,36 @@ export default function App() {
             </div>
             <section className="bank-overview" aria-label="Question bank progress overview">
               <article className="bank-metric-card">
-                <header><ClipboardCheck size={17} /><span>Completed</span></header>
+                <header><span>Completed</span></header>
                 <strong>{totalAnswered.toLocaleString()}</strong>
                 <p>{overallProgressPercent}% of the full question bank</p>
                 <div className="bank-metric-track"><span style={{ width: `${overallProgressPercent}%` }} /></div>
               </article>
               <article className="bank-metric-card accuracy">
-                <header><BarChart3 size={17} /><span>Accuracy</span></header>
+                <header><span>Accuracy</span></header>
                 <strong>{totalAnswered ? `${totalAccuracy}%` : "—"}</strong>
                 <p>{totalAnswered ? `${totalCorrect.toLocaleString()} of ${totalAnswered.toLocaleString()} correct` : "Answer your first question to begin"}</p>
                 <div className="bank-metric-track"><span style={{ width: `${totalAccuracy}%` }} /></div>
               </article>
               <article className="bank-metric-card predictor">
-                <header><Gauge size={17} /><span>Score predictor</span></header>
+                <header><span>Score predictor</span></header>
                 <div className="bank-predicted-score">
                   <strong>{scorePrediction?.estimated ?? "—"}</strong>
                   {scorePrediction && <span>{scorePrediction.low}–{scorePrediction.high}</span>}
                 </div>
-                <p>{scorePrediction ? `${scorePrediction.confidence} · ${scorePrediction.sampleSize} questions` : "Complete a short diagnostic for your estimate"}</p>
+                <p>{scorePrediction ? `${scorePrediction.confidence} · ${scorePrediction.sampleSize} questions` : `${Math.min(totalAnswered, SCORE_PREDICTION_MIN_ANSWERS)} of ${SCORE_PREDICTION_MIN_ANSWERS} questions completed`}</p>
+                {!scorePrediction && (
+                  <div
+                    className="bank-predictor-track"
+                    role="progressbar"
+                    aria-label="Questions completed for score prediction"
+                    aria-valuemin={0}
+                    aria-valuemax={SCORE_PREDICTION_MIN_ANSWERS}
+                    aria-valuenow={Math.min(totalAnswered, SCORE_PREDICTION_MIN_ANSWERS)}
+                  >
+                    <span style={{ width: `${Math.min(100, (totalAnswered / SCORE_PREDICTION_MIN_ANSWERS) * 100)}%` }} />
+                  </div>
+                )}
                 <button onClick={startScoreDiagnostic}>{scorePrediction ? "Refine estimate" : "Start diagnostic"}<ChevronRight size={14} /></button>
               </article>
               <article className="bank-error-log">
@@ -2810,8 +2880,9 @@ function QuestionBankNavigator({
   );
 }
 
-function PracticePapersView() {
+function PracticePapersView({ currentUser }: { currentUser: UserProfile }) {
   const availablePaper = practicePapers.find((paper) => paper.status === "available") ?? practicePapers[0];
+  const attemptHistoryKey = `sat4-practice-paper-history:${currentUser.id}`;
   const [activePaperId, setActivePaperId] = useState(availablePaper?.id ?? "");
   const [activeModuleIndex, setActiveModuleIndex] = useState<number | null>(null);
   const [activeQuestionIndex, setActiveQuestionIndex] = useState(0);
@@ -2824,7 +2895,6 @@ function PracticePapersView() {
   const [markedForReview, setMarkedForReview] = useState<Record<string, boolean>>({});
   const [paperSearch, setPaperSearch] = useState("");
   const [paperSectionFilter, setPaperSectionFilter] = useState<"All" | "Full DSAT" | "Reading & Writing" | "Math">("All");
-  const [paperStatusFilter, setPaperStatusFilter] = useState<"All" | "Available" | "Locked">("All");
   const [paperSort, setPaperSort] = useState<"Newest" | "Oldest" | "Title">("Newest");
   const [paperLoading, setPaperLoading] = useState(true);
   const [paperError, setPaperError] = useState("");
@@ -2834,6 +2904,40 @@ function PracticePapersView() {
   const [breakMode, setBreakMode] = useState(false);
   const [breakStartedAt, setBreakStartedAt] = useState(Date.now());
   const [navOpen, setNavOpen] = useState(false);
+  const [paperResultOpen, setPaperResultOpen] = useState(false);
+  const [paperCalculating, setPaperCalculating] = useState(false);
+  const [completedModules, setCompletedModules] = useState<Record<string, boolean>>({});
+  const [paperElapsedSeconds, setPaperElapsedSeconds] = useState(0);
+  const [paperHighlightOpen, setPaperHighlightOpen] = useState(false);
+  const [paperHighlightTone, setPaperHighlightTone] = useState<HighlightTone>("yellow");
+  const [paperHighlights, setPaperHighlights] = useState<Record<string, PracticeHighlight[]>>({});
+  const [paperMoreOpen, setPaperMoreOpen] = useState(false);
+  const [paperDirectionsOpen, setPaperDirectionsOpen] = useState(false);
+  const [paperReferenceOpen, setPaperReferenceOpen] = useState(false);
+  const [paperCalculatorOpen, setPaperCalculatorOpen] = useState(false);
+  const [paperCalculatorDragging, setPaperCalculatorDragging] = useState(false);
+  const [paperCalculatorFrame, setPaperCalculatorFrame] = useState({ x: 880, y: 92, width: 430, height: 540 });
+  const [paperTextScale, setPaperTextScale] = useState<"standard" | "large">("standard");
+  const [paperLineFocus, setPaperLineFocus] = useState(false);
+  const [paperLineFocusY, setPaperLineFocusY] = useState(360);
+  const [paperReportMessage, setPaperReportMessage] = useState("");
+  const [attemptMode, setAttemptMode] = useState<"full" | "module">("full");
+  const [attemptModuleIndex, setAttemptModuleIndex] = useState<number | null>(null);
+  const [attemptQuestionIds, setAttemptQuestionIds] = useState<string[]>([]);
+  const [attemptId, setAttemptId] = useState(() => `paper-attempt-${Date.now()}`);
+  const [attemptHistory, setAttemptHistory] = useState<PracticePaperAttempt[]>(() => {
+    try {
+      const stored = window.localStorage.getItem(attemptHistoryKey);
+      return stored ? (JSON.parse(stored) as PracticePaperAttempt[]) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [reviewAttempt, setReviewAttempt] = useState<PracticePaperAttempt | null>(null);
+  const [resultReviewIndex, setResultReviewIndex] = useState(0);
+  const [resultReviewFilter, setResultReviewFilter] = useState<"All" | "Incorrect" | "Unanswered" | "Marked">("All");
+  const savedAttemptId = useRef("");
+  const historyRailRef = useRef<HTMLDivElement | null>(null);
 
   const activePaper = practicePapers.find((paper) => paper.id === activePaperId) ?? availablePaper;
   const activeModule = activeModuleIndex === null ? null : activePaper?.modules[activeModuleIndex] ?? null;
@@ -2842,16 +2946,60 @@ function PracticePapersView() {
   const elapsedSeconds = Math.max(0, Math.floor((now - paperStartedAt) / 1000));
   const remainingSeconds = activeModule ? Math.max(0, activeModule.durationMinutes * 60 - elapsedSeconds) : 0;
   const breakRemainingSeconds = Math.max(0, 10 * 60 - Math.floor((now - breakStartedAt) / 1000));
+  const activePaperQuestions = activePaper?.modules.flatMap((module) => module.questions) ?? [];
+  const attemptQuestions = attemptQuestionIds.length
+    ? attemptQuestionIds.map((id) => questions.find((question) => question.id === id)).filter((question): question is Question => Boolean(question))
+    : activePaperQuestions;
+  const paperResultStats = useMemo(() => {
+    const answeredQuestions = attemptQuestions.filter((question) =>
+      isFreeResponseQuestion(question)
+        ? Boolean(freeResponseAnswers[question.id]?.trim())
+        : paperAnswers[question.id] !== undefined
+    );
+    const correctQuestions = answeredQuestions.filter((question) =>
+      isPaperAnswerCorrect(question, paperAnswers, freeResponseAnswers)
+    );
+    const sectionStats = (["Verbal", "Math"] as Section[]).map((section) => {
+      const sectionQuestions = attemptQuestions.filter((question) => question.section === section);
+      const answered = sectionQuestions.filter((question) =>
+        isFreeResponseQuestion(question)
+          ? Boolean(freeResponseAnswers[question.id]?.trim())
+          : paperAnswers[question.id] !== undefined
+      );
+      const correct = answered.filter((question) => isPaperAnswerCorrect(question, paperAnswers, freeResponseAnswers));
+      const accuracy = sectionQuestions.length ? correct.length / sectionQuestions.length : 0;
+      return {
+        section,
+        total: sectionQuestions.length,
+        answered: answered.length,
+        correct: correct.length,
+        accuracy: Math.round(accuracy * 100),
+        score: sectionQuestions.length ? Math.round((200 + 600 * accuracy) / 10) * 10 : 0,
+      };
+    });
+    const skillMisses = answeredQuestions
+      .filter((question) => !isPaperAnswerCorrect(question, paperAnswers, freeResponseAnswers))
+      .reduce<Record<string, number>>((result, question) => {
+        result[question.skill] = (result[question.skill] ?? 0) + 1;
+        return result;
+      }, {});
+    return {
+      total: attemptQuestions.length,
+      answered: answeredQuestions.length,
+      correct: correctQuestions.length,
+      accuracy: attemptQuestions.length ? Math.round((correctQuestions.length / attemptQuestions.length) * 100) : 0,
+      sectionStats,
+      focusSkills: Object.entries(skillMisses).sort((a, b) => b[1] - a[1]).slice(0, 3),
+    };
+  }, [attemptQuestions, freeResponseAnswers, paperAnswers]);
 
   const filteredPapers = useMemo(() => {
     const query = paperSearch.trim().toLowerCase();
     const list = practicePapers.filter((paper) => {
+      if (paper.status !== "available") return false;
       const matchesSearch = !query || `${paper.title} ${paper.dateLabel}`.toLowerCase().includes(query);
       const matchesSection = paperSectionFilter === "All" || paper.tags.includes(paperSectionFilter);
-      const matchesStatus =
-        paperStatusFilter === "All" ||
-        (paperStatusFilter === "Available" ? paper.status === "available" : paper.status === "locked");
-      return matchesSearch && matchesSection && matchesStatus;
+      return matchesSearch && matchesSection;
     });
 
     return [...list].sort((first, second) => {
@@ -2859,7 +3007,7 @@ function PracticePapersView() {
       const dateDiff = new Date(first.dateSort).getTime() - new Date(second.dateSort).getTime();
       return paperSort === "Newest" ? -dateDiff : dateDiff;
     });
-  }, [paperSearch, paperSectionFilter, paperStatusFilter, paperSort]);
+  }, [paperSearch, paperSectionFilter, paperSort]);
 
   useEffect(() => {
     const loadingTimer = window.setTimeout(() => setPaperLoading(false), 360);
@@ -2871,6 +3019,46 @@ function PracticePapersView() {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, [activeModuleIndex, breakMode]);
+
+  useEffect(() => {
+    if (!paperResultOpen || !activePaper || savedAttemptId.current === attemptId) return;
+    const estimatedScore = paperResultStats.sectionStats.reduce((sum, section) => sum + section.score, 0);
+    const moduleLabel = attemptModuleIndex === null ? null : activePaper.modules[attemptModuleIndex]?.label;
+    const attempt: PracticePaperAttempt = {
+      id: attemptId,
+      paperId: activePaper.id,
+      paperTitle: activePaper.title,
+      mode: attemptMode,
+      moduleIndex: attemptModuleIndex ?? undefined,
+      label: attemptMode === "module" && moduleLabel ? moduleLabel : "Full Digital SAT",
+      completedAt: new Date().toISOString(),
+      elapsedSeconds: paperElapsedSeconds,
+      questionIds: attemptQuestions.map((question) => question.id),
+      selectedAnswers: paperAnswers,
+      freeAnswers: freeResponseAnswers,
+      markedForReview,
+      correct: paperResultStats.correct,
+      answered: paperResultStats.answered,
+      total: paperResultStats.total,
+      accuracy: paperResultStats.accuracy,
+      estimatedScore,
+    };
+    setAttemptHistory((history) => {
+      const next = [attempt, ...history.filter((item) => item.id !== attempt.id)].slice(0, 30);
+      window.localStorage.setItem(attemptHistoryKey, JSON.stringify(next));
+      return next;
+    });
+    savedAttemptId.current = attemptId;
+  }, [activePaper, attemptHistoryKey, attemptId, attemptMode, attemptModuleIndex, attemptQuestions, freeResponseAnswers, markedForReview, paperAnswers, paperElapsedSeconds, paperResultOpen, paperResultStats]);
+
+  useEffect(() => {
+    if (!paperCalculating) return;
+    const resultTimer = window.setTimeout(() => {
+      setPaperCalculating(false);
+      setPaperResultOpen(true);
+    }, 1400);
+    return () => window.clearTimeout(resultTimer);
+  }, [paperCalculating]);
 
   if (!activePaper) {
     return (
@@ -2891,14 +3079,38 @@ function PracticePapersView() {
     setConfirmNextModuleIndex(null);
     setNavOpen(false);
     setTimerHidden(false);
+    setPaperResultOpen(false);
+    setPaperCalculating(false);
+    setPaperHighlightOpen(false);
+    setPaperMoreOpen(false);
+    setPaperDirectionsOpen(false);
+    setPaperReferenceOpen(false);
+    setPaperCalculatorOpen(false);
+    setPaperLineFocus(false);
     setPaperStartedAt(Date.now());
     setNow(Date.now());
   };
 
-  const openPaperIntro = (paper: PracticePaper, moduleIndex = 0) => {
+  const openPaperIntro = (paper: PracticePaper, moduleIndex = 0, mode: "full" | "module" = "full") => {
     if (paper.status !== "available" || !paper.modules.length) return;
+    const selectedQuestions = mode === "module"
+      ? paper.modules[moduleIndex]?.questions ?? []
+      : paper.modules.flatMap((module) => module.questions);
     setActivePaperId(paper.id);
     setPendingModuleIndex(moduleIndex);
+    setAttemptMode(mode);
+    setAttemptModuleIndex(mode === "module" ? moduleIndex : null);
+    setAttemptQuestionIds(selectedQuestions.map((question) => question.id));
+    setAttemptId(`paper-attempt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+    savedAttemptId.current = "";
+    setPaperAnswers({});
+    setFreeResponseAnswers({});
+    setMarkedForReview({});
+    setCompletedModules({});
+    setPaperElapsedSeconds(0);
+    setPaperResultOpen(false);
+    setPaperCalculating(false);
+    setReviewAttempt(null);
     setPaperIntroOpen(true);
     setBreakMode(false);
     setReviewMode(false);
@@ -2906,17 +3118,29 @@ function PracticePapersView() {
   };
 
   const finishModule = () => {
+    if (activeModule && !completedModules[activeModule.id]) {
+      setPaperElapsedSeconds((total) => total + Math.min(elapsedSeconds, activeModule.durationMinutes * 60));
+      setCompletedModules((current) => ({ ...current, [activeModule.id]: true }));
+    }
     setReviewMode(true);
     setNavOpen(false);
   };
 
   const requestNextModule = () => {
     if (activeModuleIndex === null) return;
+    if (attemptMode === "module") {
+      setActiveModuleIndex(null);
+      setReviewMode(false);
+      setConfirmNextModuleIndex(null);
+      setPaperCalculating(true);
+      return;
+    }
     const nextIndex = activeModuleIndex + 1;
     if (!activePaper.modules[nextIndex]) {
       setActiveModuleIndex(null);
       setReviewMode(false);
       setConfirmNextModuleIndex(null);
+      setPaperCalculating(true);
       return;
     }
     setConfirmNextModuleIndex(nextIndex);
@@ -2942,33 +3166,242 @@ function PracticePapersView() {
     setNavOpen(false);
   };
 
+  const capturePaperHighlight = () => {
+    if (!paperHighlightOpen || !activeQuestion) return;
+    const selection = window.getSelection();
+    const text = selection?.toString().replace(/\s+/g, " ").trim() ?? "";
+    if (text.length < 2 || text.length > 240) return;
+    setPaperHighlights((current) => {
+      const highlights = current[activeQuestion.id] ?? [];
+      if (highlights.some((highlight) => highlight.text.toLowerCase() === text.toLowerCase())) return current;
+      return { ...current, [activeQuestion.id]: [...highlights, { text, tone: paperHighlightTone }] };
+    });
+    selection?.removeAllRanges();
+  };
+
+  const movePaperCalculator = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!paperCalculatorDragging) return;
+    setPaperCalculatorFrame((frame) => ({
+      ...frame,
+      x: Math.max(8, Math.min(window.innerWidth - 120, frame.x + event.movementX)),
+      y: Math.max(82, Math.min(window.innerHeight - 90, frame.y + event.movementY)),
+    }));
+  };
+
+  const resetPaperAttempt = () => {
+    openPaperIntro(activePaper, attemptModuleIndex ?? 0, attemptMode);
+  };
+
+  const getCurrentAttemptSnapshot = (): PracticePaperAttempt => {
+    const estimatedScore = paperResultStats.sectionStats.reduce((sum, section) => sum + section.score, 0);
+    const moduleLabel = attemptModuleIndex === null ? null : activePaper.modules[attemptModuleIndex]?.label;
+    return {
+      id: attemptId,
+      paperId: activePaper.id,
+      paperTitle: activePaper.title,
+      mode: attemptMode,
+      moduleIndex: attemptModuleIndex ?? undefined,
+      label: attemptMode === "module" && moduleLabel ? moduleLabel : "Full Digital SAT",
+      completedAt: new Date().toISOString(),
+      elapsedSeconds: paperElapsedSeconds,
+      questionIds: attemptQuestions.map((question) => question.id),
+      selectedAnswers: paperAnswers,
+      freeAnswers: freeResponseAnswers,
+      markedForReview,
+      correct: paperResultStats.correct,
+      answered: paperResultStats.answered,
+      total: paperResultStats.total,
+      accuracy: paperResultStats.accuracy,
+      estimatedScore,
+    };
+  };
+
+  if (reviewAttempt) {
+    const reviewQuestions = reviewAttempt.questionIds
+      .map((id) => questions.find((question) => question.id === id))
+      .filter((question): question is Question => Boolean(question));
+    const questionStatus = (question: Question) => {
+      const answered = isFreeResponseQuestion(question)
+        ? Boolean(reviewAttempt.freeAnswers[question.id]?.trim())
+        : reviewAttempt.selectedAnswers[question.id] !== undefined;
+      return {
+        answered,
+        correct: answered && isPaperAnswerCorrect(question, reviewAttempt.selectedAnswers, reviewAttempt.freeAnswers),
+        marked: Boolean(reviewAttempt.markedForReview[question.id]),
+      };
+    };
+    const filteredReviewQuestions = reviewQuestions.filter((question) => {
+      const status = questionStatus(question);
+      if (resultReviewFilter === "Incorrect") return status.answered && !status.correct;
+      if (resultReviewFilter === "Unanswered") return !status.answered;
+      if (resultReviewFilter === "Marked") return status.marked;
+      return true;
+    });
+    const safeReviewIndex = Math.min(resultReviewIndex, Math.max(0, filteredReviewQuestions.length - 1));
+    const reviewQuestion = filteredReviewQuestions[safeReviewIndex] ?? null;
+    const reviewStatus = reviewQuestion ? questionStatus(reviewQuestion) : null;
+    const selectedChoice = reviewQuestion ? reviewAttempt.selectedAnswers[reviewQuestion.id] : undefined;
+    const acceptedAnswers = reviewQuestion && isFreeResponseQuestion(reviewQuestion) ? parseAcceptedAnswers(reviewQuestion) : [];
+
+    return (
+      <main className="paper-answer-review-shell">
+        <header className="paper-answer-review-topbar">
+          <button onClick={() => setReviewAttempt(null)}><ChevronLeft size={17} /> {paperResultOpen ? "Back to results" : "Back to history"}</button>
+          <div><span>{reviewAttempt.label}</span><strong>Answer review</strong></div>
+          <span>{reviewAttempt.correct}/{reviewAttempt.total} correct</span>
+        </header>
+        <div className="paper-answer-review-layout">
+          <aside className="paper-review-sidebar">
+            <div className="paper-review-filter-tabs" role="group" aria-label="Review filter">
+              {(["All", "Incorrect", "Unanswered", "Marked"] as const).map((filter) => (
+                <button key={filter} className={resultReviewFilter === filter ? "active" : ""} onClick={() => { setResultReviewFilter(filter); setResultReviewIndex(0); }}>{filter}</button>
+              ))}
+            </div>
+            <div className="paper-review-history-legend">
+              <span><i className="correct"><Check size={10} /></i> Correct</span>
+              <span><i className="incorrect"><X size={10} /></i> Incorrect</span>
+              <span><i className="unanswered" /> Unanswered</span>
+            </div>
+            <div className="paper-review-history-grid">
+              {filteredReviewQuestions.map((question, index) => {
+                const status = questionStatus(question);
+                const originalIndex = reviewQuestions.findIndex((item) => item.id === question.id);
+                return (
+                  <button key={question.id} className={[status.correct ? "correct" : status.answered ? "incorrect" : "unanswered", status.marked ? "marked" : "", index === safeReviewIndex ? "active" : ""].join(" ")} onClick={() => setResultReviewIndex(index)}>
+                    {originalIndex + 1}
+                    {status.marked && <Bookmark size={10} fill="currentColor" />}
+                  </button>
+                );
+              })}
+            </div>
+          </aside>
+
+          <section className="paper-review-detail">
+            {reviewQuestion && reviewStatus ? (
+              <>
+                <header>
+                  <div><span>Question {reviewQuestions.findIndex((question) => question.id === reviewQuestion.id) + 1}</span><strong>{reviewQuestion.domain}</strong></div>
+                  <span className={reviewStatus.correct ? "correct" : reviewStatus.answered ? "incorrect" : "unanswered"}>{reviewStatus.correct ? "Correct" : reviewStatus.answered ? "Incorrect" : "Unanswered"}</span>
+                </header>
+                <article className="paper-review-question-card">
+                  {reviewQuestion.imagePath && <img src={reviewQuestion.imagePath} alt="Question visual" />}
+                  {(!reviewQuestion.imagePath || !/^enter your answer\.?$/i.test(reviewQuestion.prompt.trim())) && <p>{reviewQuestion.prompt}</p>}
+                  {isFreeResponseQuestion(reviewQuestion) ? (
+                    <div className="paper-review-free-answer"><span>Your answer</span><strong>{reviewAttempt.freeAnswers[reviewQuestion.id] || "No answer"}</strong><span>Accepted answer</span><strong>{acceptedAnswers.join(" or ") || "See explanation"}</strong></div>
+                  ) : (
+                    <div className="paper-review-choice-list">
+                      {reviewQuestion.choices.map((choice, index) => (
+                        <div key={`${reviewQuestion.id}-${index}`} className={[index === reviewQuestion.correctIndex ? "correct" : "", index === selectedChoice ? "selected" : ""].join(" ")}>
+                          <span>{String.fromCharCode(65 + index)}</span>
+                          {reviewQuestion.choiceImagePaths?.[index] && /^Choice [A-D]$/i.test(choice) ? <img src={reviewQuestion.choiceImagePaths[index]} alt={`Choice ${String.fromCharCode(65 + index)}`} /> : <strong>{choice.replace(/^[A-D][.)]\s*/, "")}</strong>}
+                          {index === reviewQuestion.correctIndex && <small><Check size={13} /> Correct answer</small>}
+                          {index === selectedChoice && index !== reviewQuestion.correctIndex && <small><X size={13} /> Your answer</small>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </article>
+                <article className="paper-review-explanation"><span>Explanation</span><p>{reviewQuestion.explanation}</p></article>
+                <footer><button disabled={safeReviewIndex === 0} onClick={() => setResultReviewIndex((index) => Math.max(0, index - 1))}>Previous</button><span>{safeReviewIndex + 1} of {filteredReviewQuestions.length}</span><button disabled={safeReviewIndex >= filteredReviewQuestions.length - 1} onClick={() => setResultReviewIndex((index) => Math.min(filteredReviewQuestions.length - 1, index + 1))}>Next</button></footer>
+              </>
+            ) : (
+              <div className="paper-review-empty"><Check size={28} /><h2>No questions in this filter</h2><p>Choose another filter to continue reviewing.</p></div>
+            )}
+          </section>
+        </div>
+      </main>
+    );
+  }
+
+  if (paperCalculating) {
+    return (
+      <main className="paper-calculating-shell" aria-live="polite" aria-busy="true">
+        <section className="paper-calculating-card">
+          <div className="paper-calculating-mark" aria-hidden="true"><span /><span /><span /></div>
+          <p>Practice complete</p>
+          <h1>Calculating your results</h1>
+          <span>Checking answers and preparing your review.</span>
+        </section>
+      </main>
+    );
+  }
+
+  if (paperResultOpen) {
+    const estimatedScore = paperResultStats.sectionStats.reduce((sum, section) => sum + section.score, 0);
+    const resultLabel = attemptMode === "module" && attemptModuleIndex !== null
+      ? activePaper.modules[attemptModuleIndex]?.label ?? "Module practice"
+      : "Full Digital SAT";
+    return (
+      <main className="paper-results-shell">
+        <header className="paper-results-header">
+          <div>
+            <p className="eyebrow">Practice complete</p>
+            <h1>Your results are ready.</h1>
+            <p>{activePaper.title} · {resultLabel}</p>
+          </div>
+          <button className="paper-soft-button" onClick={() => setPaperResultOpen(false)}>Back to papers</button>
+        </header>
+
+        <section className="paper-results-summary" aria-label="Practice test result summary">
+          <article className="paper-score-card">
+            <span>{attemptMode === "module" ? "Module score estimate" : "Practice score estimate"}</span>
+            <strong>{estimatedScore}</strong>
+            <small>Based on this paper’s raw accuracy, not an official College Board score.</small>
+          </article>
+          <article><span>Correct</span><strong>{paperResultStats.correct}/{paperResultStats.total}</strong><small>{paperResultStats.accuracy}% accuracy</small></article>
+          <article><span>Answered</span><strong>{paperResultStats.answered}/{paperResultStats.total}</strong><small>{paperResultStats.total - paperResultStats.answered} left blank</small></article>
+          <article><span>Time used</span><strong>{formatTimer(paperElapsedSeconds)}</strong><small>Across completed modules</small></article>
+        </section>
+
+        <section className="paper-results-detail">
+          <article className="paper-section-results">
+            <div className="paper-results-section-heading">
+              <div>
+                <p className="eyebrow">Section breakdown</p>
+                <h2>See where the score came from</h2>
+              </div>
+            </div>
+            {paperResultStats.sectionStats.filter((stat) => stat.total > 0).map((stat) => (
+              <div className="paper-section-result-row" key={stat.section}>
+                <div><strong>{sectionLabel(stat.section)}</strong><span>{stat.correct} of {stat.total} correct</span></div>
+                <div className="paper-result-progress" aria-label={`${stat.accuracy}% correct`}><span style={{ width: `${stat.accuracy}%` }} /></div>
+                <strong>{stat.score}</strong>
+              </div>
+            ))}
+          </article>
+
+          <article className="paper-focus-card">
+            <p className="eyebrow">What to study next</p>
+            <h2>{paperResultStats.focusSkills.length ? "Turn mistakes into your next practice set" : paperResultStats.answered < paperResultStats.total ? "Answer more questions for a focused plan" : "Excellent work"}</h2>
+            {paperResultStats.focusSkills.length ? (
+              <ul>
+                {paperResultStats.focusSkills.map(([skill, misses]) => <li key={skill}><span>{skill}</span><strong>{misses} to review</strong></li>)}
+              </ul>
+            ) : (
+              <p>{paperResultStats.answered < paperResultStats.total ? "There are not enough answered mistakes to identify a weak skill yet. Retake the paper and complete each module." : "No weak skills appeared in this attempt. Try another paper to confirm your consistency."}</p>
+            )}
+            <div className="paper-result-actions">
+              <button className="primary-button" onClick={() => { setReviewAttempt(attemptHistory.find((attempt) => attempt.id === attemptId) ?? getCurrentAttemptSnapshot()); setResultReviewFilter("All"); setResultReviewIndex(0); }}><BookOpenCheck size={16} /> Review answers</button>
+              <button className="paper-soft-button" onClick={resetPaperAttempt}><RotateCcw size={16} /> Retake</button>
+            </div>
+          </article>
+        </section>
+      </main>
+    );
+  }
+
   if (paperIntroOpen) {
+    const introModule = activePaper.modules[pendingModuleIndex];
+    const introFacts = attemptMode === "module"
+      ? [`${introModule?.questions.length ?? 0} questions`, `${introModule?.durationMinutes ?? 0} minutes`, "Instant review"]
+      : [`${activePaper.modules.reduce((sum, module) => sum + module.questions.length, 0)} questions`, `${activePaper.modules.reduce((sum, module) => sum + module.durationMinutes, 0)} minutes`, `${activePaper.modules.length} modules`];
     return (
       <main className="paper-intro-shell">
         <section className="paper-intro-card">
-          <h1>Bluebook Simulation</h1>
-          <div className="paper-intro-list">
-            <article>
-              <Clock3 size={25} />
-              <div>
-                <h2>Timing</h2>
-                <p>Practice tests are timed, but you can pause them. If you continue on another device, you have to start over.</p>
-              </div>
-            </article>
-            <article>
-              <ClipboardCheck size={25} />
-              <div>
-                <h2>Scores</h2>
-                <p>When you finish the practice test, review your answers and use the mistakes to plan your next study block.</p>
-              </div>
-            </article>
-            <article>
-              <DoorOpen size={25} />
-              <div>
-                <h2>No Device Lock</h2>
-                <p>We do not lock your device during practice. Keep the exam screen open for the most realistic experience.</p>
-              </div>
-            </article>
+          <p className="paper-intro-kicker">Ready to begin?</p>
+          <h1>{attemptMode === "module" ? introModule?.label : "Full Digital SAT"}</h1>
+          <div className="paper-intro-facts">
+            {introFacts.map((fact) => <strong key={fact}>{fact}</strong>)}
           </div>
         </section>
         <footer className="paper-intro-footer">
@@ -3013,6 +3446,7 @@ function PracticePapersView() {
     const isFreeResponse = isFreeResponseQuestion(activeQuestion);
     const sectionNumber = activeModule.section === "Verbal" ? 1 : 2;
     const isVerbalPaperQuestion = activeModule.section === "Verbal";
+    const activePaperHighlights = paperHighlights[activeQuestion.id] ?? [];
     const verbalQuestionOnLeft = isVerbalPaperQuestion && !activePrompt.passage && !activePrompt.notes.length;
     const rightQuestionText = verbalQuestionOnLeft
       ? "Which choice best completes the text?"
@@ -3047,7 +3481,7 @@ function PracticePapersView() {
             );
           })}
         </div>
-        <button className="paper-preview-button" onClick={() => setReviewMode(true)}>Go to Preview Page</button>
+        <button className="paper-preview-button" onClick={finishModule}>Go to Preview Page</button>
       </div>
     );
 
@@ -3055,15 +3489,12 @@ function PracticePapersView() {
       return (
         <main className="paper-exam-shell paper-exam-shell-review">
           <header className="paper-exam-topbar">
-            <button className="paper-directions">Directions <ChevronRight size={13} /></button>
+            <div className="paper-directions">Review module</div>
             <div className="paper-timer">
               <strong>{timerHidden ? "--:--" : formatTimer(remainingSeconds)}</strong>
               <button onClick={() => setTimerHidden((hidden) => !hidden)}>{timerHidden ? "Show" : "Hide"}</button>
             </div>
-            <div className="paper-tools">
-              <button><Highlighter size={17} /> Highlight</button>
-              <button><MoreHorizontal size={17} /> More</button>
-            </div>
+            <div className="paper-review-status"><ClipboardCheck size={17} /> Check unanswered and marked questions</div>
           </header>
           <section className="paper-review-screen">
             <h1>Check Your Work</h1>
@@ -3127,24 +3558,74 @@ function PracticePapersView() {
     return (
       <main className="paper-exam-shell paper-exam-shell-dark">
         <header className="paper-exam-topbar">
-          <button className="paper-directions">Section {sectionNumber}, Module {activeModule.moduleNumber}: {sectionLabel(activeModule.section)}</button>
+          <button className="paper-directions" onClick={() => setPaperDirectionsOpen((open) => !open)} aria-expanded={paperDirectionsOpen}>Section {sectionNumber}, Module {activeModule.moduleNumber}: {sectionLabel(activeModule.section)}</button>
           <div className="paper-timer">
             <strong>{timerHidden ? "--:--" : formatTimer(remainingSeconds)}</strong>
             <button onClick={() => setTimerHidden((hidden) => !hidden)}>{timerHidden ? "Show" : "Hide"}</button>
           </div>
           <div className="paper-tools">
-            {activeModule.section === "Math" && <button><Calculator size={17} /> Calculator</button>}
-            <button><Highlighter size={17} /> Highlight</button>
-            <button><MoreHorizontal size={17} /> More</button>
+            {activeModule.section === "Math" && <button className={paperCalculatorOpen ? "active" : ""} onClick={() => setPaperCalculatorOpen((open) => !open)}><Calculator size={17} /> Calculator</button>}
+            {activeModule.section === "Math" && <button className={paperReferenceOpen ? "active" : ""} onClick={() => { setPaperReferenceOpen((open) => !open); setPaperMoreOpen(false); }}><FileText size={17} /> Reference</button>}
+            <button className={paperHighlightOpen ? "active" : ""} onClick={() => { setPaperHighlightOpen((open) => !open); setPaperMoreOpen(false); setPaperReferenceOpen(false); }}><Highlighter size={17} /> Highlight</button>
+            <button className={paperMoreOpen ? "active" : ""} onClick={() => { setPaperMoreOpen((open) => !open); setPaperHighlightOpen(false); setPaperReferenceOpen(false); }}><MoreHorizontal size={17} /> More</button>
           </div>
         </header>
+
+        {paperDirectionsOpen && (
+          <aside className="paper-tool-popover paper-directions-popover">
+            <header><strong>{sectionLabel(activeModule.section)} directions</strong><button onClick={() => setPaperDirectionsOpen(false)} aria-label="Close directions"><X size={16} /></button></header>
+            <p>Answer every question you can. You may move within this module and mark questions for review. Once you continue to the next module, you cannot return.</p>
+          </aside>
+        )}
+
+        {paperHighlightOpen && (
+          <aside className="paper-tool-popover paper-highlight-popover" aria-label="Highlight tool">
+            <header><strong>Highlight</strong><button onClick={() => setPaperHighlightOpen(false)} aria-label="Close highlight tool"><X size={16} /></button></header>
+            <p>Select text in the question or an answer choice.</p>
+            <div className="paper-highlight-tones">
+              {(["yellow", "mint", "pink"] as HighlightTone[]).map((tone) => <button key={tone} className={`${tone}${paperHighlightTone === tone ? " active" : ""}`} onClick={() => setPaperHighlightTone(tone)}><span />{tone}</button>)}
+            </div>
+            <button className="paper-tool-action" disabled={!activePaperHighlights.length} onClick={() => setPaperHighlights((current) => ({ ...current, [activeQuestion.id]: [] }))}>Clear highlights ({activePaperHighlights.length})</button>
+          </aside>
+        )}
+
+        {paperMoreOpen && (
+          <aside className="paper-tool-popover paper-more-popover" aria-label="Display settings">
+            <header><strong>Display settings</strong><button onClick={() => setPaperMoreOpen(false)} aria-label="Close display settings"><X size={16} /></button></header>
+            <span>Text size</span>
+            <div className="paper-segmented"><button className={paperTextScale === "standard" ? "active" : ""} onClick={() => setPaperTextScale("standard")}>Standard</button><button className={paperTextScale === "large" ? "active" : ""} onClick={() => setPaperTextScale("large")}>Large</button></div>
+            <button className="paper-line-toggle" aria-pressed={paperLineFocus} onClick={() => setPaperLineFocus((enabled) => !enabled)}><span><strong>Line focus</strong><small>Keep attention on one reading line</small></span><i /></button>
+          </aside>
+        )}
+
+        {activeModule.section === "Math" && paperReferenceOpen && (
+          <aside className="paper-tool-popover paper-reference-popover" aria-label="SAT math reference sheet">
+            <header><strong>Math reference</strong><button onClick={() => setPaperReferenceOpen(false)} aria-label="Close reference"><X size={16} /></button></header>
+            <div className="paper-formula-grid"><span>A = πr²</span><span>C = 2πr</span><span>a² + b² = c²</span><span>V = ℓwh</span><span>V = πr²h</span><span>V = ⁴⁄₃πr³</span></div>
+            <small>A circle has 360°. Triangle angles total 180°.</small>
+          </aside>
+        )}
+
+        {activeModule.section === "Math" && paperCalculatorOpen && (
+          <aside className="calculator-popover paper-calculator" aria-label="Desmos calculator" style={{ left: paperCalculatorFrame.x, top: paperCalculatorFrame.y, width: paperCalculatorFrame.width, height: paperCalculatorFrame.height }}>
+            <div className="calculator-header" onPointerDown={(event) => { setPaperCalculatorDragging(true); event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={movePaperCalculator} onPointerUp={(event) => { setPaperCalculatorDragging(false); event.currentTarget.releasePointerCapture(event.pointerId); }} onPointerCancel={() => setPaperCalculatorDragging(false)}>
+              <strong>Desmos Calculator</strong><button onClick={() => setPaperCalculatorOpen(false)}>Close</button>
+            </div>
+            <iframe title="Desmos calculator" src="https://www.desmos.com/calculator" />
+          </aside>
+        )}
+
+        {paperLineFocus && <div className="paper-line-focus" aria-hidden="true" style={{ top: paperLineFocusY - 42 }} />}
 
         <section
           className={[
             "paper-stage",
             activeModule.section === "Math" ? "paper-stage-math" : "",
             isFreeResponse ? "paper-stage-free-response" : "",
+            paperTextScale === "large" ? "paper-stage-large-text" : "",
           ].join(" ")}
+          onMouseUp={capturePaperHighlight}
+          onPointerMove={(event) => paperLineFocus && setPaperLineFocusY(event.clientY)}
         >
           {activeModule.section === "Math" && isFreeResponse ? (
             <article className="paper-math-directions">
@@ -3181,7 +3662,10 @@ function PracticePapersView() {
                   </ul>
                 </div>
               ) : (
-                activePrompt.passage || (verbalQuestionOnLeft ? activePrompt.questionText : "")
+                <>
+                  {activeQuestion.imagePath && activeModule.section === "Verbal" && <img className="paper-stimulus-image" src={activeQuestion.imagePath} alt="Table or chart for this question" />}
+                  <HighlightedText text={activePrompt.passage || (verbalQuestionOnLeft ? activePrompt.questionText : "")} highlights={activePaperHighlights} />
+                </>
               )}
             </article>
           )}
@@ -3200,9 +3684,12 @@ function PracticePapersView() {
                 <Bookmark size={15} fill={questionMarked ? "currentColor" : "none"} />
                 Mark for Review
               </button>
-              <em><FileQuestion size={15} /> Report</em>
+              <button className="paper-report-button" onClick={() => setPaperReportMessage("Thanks — this question was flagged for review.")}><FileQuestion size={15} /> Report</button>
             </header>
-            <p className="paper-question-text">{rightQuestionText}</p>
+            {activeQuestion.imagePath && activeModule.section === "Math" && <img className="paper-question-image" src={activeQuestion.imagePath} alt="Math question" />}
+            {(!activeQuestion.imagePath || !/^enter your answer\.?$/i.test(rightQuestionText.trim())) && (
+              <p className="paper-question-text"><HighlightedText text={rightQuestionText} highlights={activePaperHighlights} /></p>
+            )}
             {isFreeResponse ? (
               <label className="paper-free-response-field">
                 <span>Your answer</span>
@@ -3221,11 +3708,18 @@ function PracticePapersView() {
                     onClick={() => setPaperAnswers((current) => ({ ...current, [activeQuestion.id]: index }))}
                   >
                     <span>{String.fromCharCode(65 + index)}</span>
-                    <strong>{choice.replace(/^[A-D][.)]\s*/, "")}</strong>
+                    {activeQuestion.choiceImagePaths?.[index] && /^Choice [A-D]$/i.test(choice) ? (
+                      <div className={`paper-choice-image-frame ${activeQuestion.id === "M-PSDA-PROB-b8150b17" ? "paper-choice-image-frame-cropped" : ""}`}>
+                        <img className="paper-choice-image" src={activeQuestion.choiceImagePaths[index]} alt={`Answer choice ${String.fromCharCode(65 + index)}`} />
+                      </div>
+                    ) : (
+                      <strong><HighlightedText text={choice.replace(/^[A-D][.)]\s*/, "")} highlights={activePaperHighlights} /></strong>
+                    )}
                   </button>
                 ))}
               </div>
             )}
+            {paperReportMessage && <div className="paper-report-toast" role="status">{paperReportMessage}<button onClick={() => setPaperReportMessage("")} aria-label="Dismiss"><X size={14} /></button></div>}
           </article>
         </section>
 
@@ -3258,13 +3752,20 @@ function PracticePapersView() {
   }
 
   const activePaperQuestionCount = activePaper.modules.reduce((sum, module) => sum + module.questions.length, 0);
+  const activePaperDuration = activePaper.modules.reduce((sum, module) => sum + module.durationMinutes, 0);
+  const activePaperFreeResponseCount = activePaperQuestions.filter(isFreeResponseQuestion).length;
+  const activePaperDomains = Object.entries(
+    activePaperQuestions.reduce<Record<string, number>>((result, question) => {
+      result[question.domain] = (result[question.domain] ?? 0) + 1;
+      return result;
+    }, {})
+  ).sort((first, second) => second[1] - first[1]);
 
   return (
     <section className="practice-papers-page">
       <div className="practice-papers-hero">
         <p className="eyebrow">Practice Papers</p>
         <h1>Past papers, real exam feel.</h1>
-        <p>Choose a paper by date, then practice modules in a clean DSAT-style test screen.</p>
       </div>
 
       <div className="practice-paper-controls">
@@ -3281,11 +3782,6 @@ function PracticePapersView() {
           <option>Full DSAT</option>
           <option>Reading & Writing</option>
           <option>Math</option>
-        </select>
-        <select value={paperStatusFilter} onChange={(event) => setPaperStatusFilter(event.target.value as typeof paperStatusFilter)}>
-          <option>All</option>
-          <option>Available</option>
-          <option>Locked</option>
         </select>
         <select value={paperSort} onChange={(event) => setPaperSort(event.target.value as typeof paperSort)}>
           <option>Newest</option>
@@ -3305,7 +3801,7 @@ function PracticePapersView() {
 
       {paperLoading ? (
         <div className="practice-paper-grid">
-          {Array.from({ length: 3 }, (_, index) => <article key={index} className="practice-paper-card skeleton" />)}
+          <article className="practice-paper-card skeleton" />
         </div>
       ) : filteredPapers.length ? (
         <div className="practice-paper-grid">
@@ -3323,21 +3819,18 @@ function PracticePapersView() {
                 ].join(" ")}
                 role={disabled ? undefined : "button"}
                 tabIndex={disabled ? -1 : 0}
-                onClick={() => openPaperIntro(paper, 0)}
+                onClick={() => openPaperIntro(paper, 0, "full")}
                 onKeyDown={(event) => {
                   if (disabled) return;
-                  if (event.key === "Enter" || event.key === " ") openPaperIntro(paper, 0);
+                  if (event.key === "Enter" || event.key === " ") openPaperIntro(paper, 0, "full");
                 }}
               >
                 <div className="paper-card-copy">
                   <span><FileText size={17} /> {paper.dateLabel}</span>
                   <h2>{paper.title}</h2>
-                  <p>{paper.sourceLabel} ? {totalQuestions || "Locked"} questions</p>
-                  <div className="paper-card-tags">
-                    {paper.tags.slice(0, 3).map((tag) => <small key={tag}>{tag}</small>)}
-                  </div>
+                  <p>{totalQuestions || "Locked"} questions · {paper.modules.reduce((sum, module) => sum + module.durationMinutes, 0)} min</p>
                 </div>
-                <button className="primary-button" disabled={disabled} onClick={(event) => { event.stopPropagation(); openPaperIntro(paper, 0); }}>
+                <button className="primary-button" disabled={disabled} onClick={(event) => { event.stopPropagation(); openPaperIntro(paper, 0, "full"); }}>
                   {disabled ? "Coming soon" : "Start paper"}
                   {!disabled && <ChevronRight size={16} />}
                 </button>
@@ -3356,55 +3849,79 @@ function PracticePapersView() {
       {activePaper.modules.length > 0 && (
         <>
           <div className="practice-module-grid">
-            {activePaper.modules.map((module, index) => (
-              <button key={module.id} onClick={() => openPaperIntro(activePaper, index)}>
-                <Clock3 size={17} />
-                <span>{module.label}</span>
-                <strong>{module.questions.length} questions ? {module.durationMinutes}:00</strong>
-              </button>
-            ))}
+            {activePaper.modules.map((module, index) => {
+              const flower = practiceModuleFlowers[index % practiceModuleFlowers.length];
+              return (
+                <button key={module.id} onClick={() => openPaperIntro(activePaper, index, "module")}>
+                  <span className="practice-module-flower"><img src={flower.src} alt={`${flower.name} bud`} /></span>
+                  <span className="practice-module-copy">{module.label}</span>
+                  <strong className="practice-module-meta">{module.questions.length} questions · {module.durationMinutes} min</strong>
+                  <ChevronRight size={17} />
+                </button>
+              );
+            })}
           </div>
+          <section className="practice-history-section">
+            <header>
+              <h2>Recent attempts</h2>
+              {attemptHistory.length > 1 && (
+                <div className="practice-history-controls" aria-label="Scroll recent attempts">
+                  <button type="button" aria-label="Previous attempts" onClick={() => historyRailRef.current?.scrollBy({ left: -380, behavior: "smooth" })}><ChevronLeft size={19} /></button>
+                  <button type="button" aria-label="Next attempts" onClick={() => historyRailRef.current?.scrollBy({ left: 380, behavior: "smooth" })}><ChevronRight size={19} /></button>
+                </div>
+              )}
+            </header>
+            {attemptHistory.length ? (
+              <div className="practice-history-list" ref={historyRailRef} tabIndex={0} aria-label="Recent practice attempts">
+                {attemptHistory.slice(0, 6).map((attempt) => (
+                  <article key={attempt.id}>
+                    <div className="practice-history-score"><strong>{attempt.accuracy}%</strong><span>{attempt.correct}/{attempt.total}</span></div>
+                    <div><h3>{attempt.label}</h3><p>{new Date(attempt.completedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} · {formatTimer(attempt.elapsedSeconds)}</p></div>
+                    <button onClick={() => { setReviewAttempt(attempt); setResultReviewFilter("All"); setResultReviewIndex(0); }}>Review <ChevronRight size={15} /></button>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="practice-history-empty"><ClipboardCheck size={22} /><div><strong>No completed attempts yet</strong><span>Finish a full test or any standalone module and it will appear here.</span></div></div>
+            )}
+          </section>
           <article className="practice-plan-card">
             <header>
-              <div>
-                <p className="eyebrow">Blueprint check</p>
-                <h2>98 unique questions arranged like a full Digital SAT.</h2>
-              </div>
+              <h2>Test overview</h2>
               <strong>{activePaperQuestionCount} questions</strong>
             </header>
-            <div className="practice-plan-table">
-              <table>
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Question ID</th>
-                    <th>Section</th>
-                    <th>Module</th>
-                    <th>Domain</th>
-                    <th>Skill</th>
-                    <th>Difficulty</th>
-                    <th>Type</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {activePaper.modules.flatMap((module) =>
-                    module.questions.map((question, questionIndex) => (
-                      <tr key={`${module.id}-${question.id}`}>
-                        <td>{questionIndex + 1}</td>
-                        <td>{question.id}</td>
-                        <td>{sectionLabel(module.section)}</td>
-                        <td>{module.moduleNumber}</td>
-                        <td>{question.domain}</td>
-                        <td>{question.skill}</td>
-                        <td>{question.difficulty}</td>
-                        <td>{isFreeResponseQuestion(question) ? "Student-produced" : "Multiple choice"}</td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+            <div className="practice-blueprint-summary">
+              <article><span>Test time</span><strong>{activePaperDuration} min</strong><small>Four timed modules and a 10-minute break</small></article>
+              <article><span>Answer formats</span><strong>{activePaperQuestionCount - activePaperFreeResponseCount} + {activePaperFreeResponseCount}</strong><small>Multiple choice and student response</small></article>
+              <article><span>Results</span><strong>Instant</strong><small>Score estimate, accuracy, and answer review</small></article>
+            </div>
+            <div className="practice-blueprint-layout">
+              <section className="practice-domain-map">
+                <h3>Question mix</h3>
+                {activePaperDomains.map(([domain, count]) => (
+                  <div className="practice-domain-row" key={domain}>
+                    <span>{domain}</span>
+                    <div aria-label={`${count} questions`}><i style={{ width: `${(count / Math.max(...activePaperDomains.map((entry) => entry[1]))) * 100}%` }} /></div>
+                    <strong>{count}</strong>
+                  </div>
+                ))}
+              </section>
             </div>
           </article>
+          <section className="practice-upcoming-section" aria-labelledby="practice-upcoming-title">
+            <header>
+              <h2 id="practice-upcoming-title">Coming next</h2>
+            </header>
+            {practicePapers.filter((paper) => paper.status === "locked").map((paper) => (
+              <article className="practice-paper-card practice-upcoming-card disabled" key={paper.id} aria-disabled="true">
+                <div className="paper-card-copy">
+                  <span><FileText size={17} /> {paper.dateLabel}</span>
+                  <h2>{paper.title}</h2>
+                </div>
+                <button className="primary-button" disabled>Coming soon</button>
+              </article>
+            ))}
+          </section>
         </>
       )}
     </section>
@@ -3421,6 +3938,7 @@ function ArenaView({ currentUser }: { currentUser: UserProfile }) {
   const [inviteCopied, setInviteCopied] = useState(false);
   const [arenaLoading, setArenaLoading] = useState(false);
   const [selectedSections, setSelectedSections] = useState<Section[]>(["Math"]);
+  const [selectedDomains, setSelectedDomains] = useState<string[]>([]);
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
   const [maxPlayers, setMaxPlayers] = useState(2);
   const [questionCount, setQuestionCount] = useState(10);
@@ -3437,6 +3955,7 @@ function ArenaView({ currentUser }: { currentUser: UserProfile }) {
   const [arenaCalculatorFrame, setArenaCalculatorFrame] = useState({ x: 860, y: 92, width: 430, height: 540 });
   const [reviewIndex, setReviewIndex] = useState(0);
   const [openReviewExplanation, setOpenReviewExplanation] = useState<Record<string, boolean>>({});
+  const arenaDemoVideoRef = useRef<HTMLVideoElement>(null);
 
   const selectedModuleGroups = useMemo(
     () =>
@@ -3472,11 +3991,12 @@ function ArenaView({ currentUser }: { currentUser: UserProfile }) {
       }
     }, 1500);
     return () => window.clearInterval(timer);
-  }, [currentUser.id, room]);
+  }, [currentUser.id, room?.id, room?.status]);
 
   useEffect(() => {
     if (!room) return;
     setSelectedSections(room.sections?.length ? room.sections : room.section === "Mixed" ? ["Math", "Verbal"] : [room.section]);
+    setSelectedDomains(room.domains);
     setSelectedSkills(room.skills);
     setMaxPlayers(room.maxPlayers);
     setQuestionCount(room.questionCount);
@@ -3493,6 +4013,18 @@ function ArenaView({ currentUser }: { currentUser: UserProfile }) {
   useEffect(() => {
     const timer = window.setInterval(() => setArenaNow(Date.now()), 500);
     return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const motionPreference = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const syncDemoPlayback = () => {
+      if (!arenaDemoVideoRef.current) return;
+      if (motionPreference.matches) arenaDemoVideoRef.current.pause();
+      else void arenaDemoVideoRef.current.play().catch(() => undefined);
+    };
+    syncDemoPlayback();
+    motionPreference.addEventListener("change", syncDemoPlayback);
+    return () => motionPreference.removeEventListener("change", syncDemoPlayback);
   }, []);
 
   const moveArenaCalculator = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -3513,7 +4045,14 @@ function ArenaView({ currentUser }: { currentUser: UserProfile }) {
   };
 
   const toggleArenaSkill = (skill: string) => {
+    const parentDomain = selectedModuleGroups.find((group) => group.skills.includes(skill))?.domain;
+    if (parentDomain) setSelectedDomains((current) => current.filter((item) => item !== parentDomain));
     setSelectedSkills((current) => (current.includes(skill) ? current.filter((item) => item !== skill) : [...current, skill]));
+  };
+
+  const toggleArenaDomain = (domain: string, skills: string[]) => {
+    setSelectedDomains((current) => (current.includes(domain) ? current.filter((item) => item !== domain) : [...current, domain]));
+    setSelectedSkills((current) => current.filter((skill) => !skills.includes(skill)));
   };
 
   const toggleArenaSection = (section: Section) => {
@@ -3521,11 +4060,14 @@ function ArenaView({ currentUser }: { currentUser: UserProfile }) {
       const next = current.includes(section) ? current.filter((item) => item !== section) : [...current, section];
       return next.length ? next : [section];
     });
+    setSelectedDomains([]);
     setSelectedSkills([]);
   };
 
-  const selectAllArenaSkills = () => setSelectedSkills(skillOptions);
-  const clearArenaSkills = () => setSelectedSkills([]);
+  const clearArenaSkills = () => {
+    setSelectedDomains([]);
+    setSelectedSkills([]);
+  };
 
   const runArenaAction = async (action: () => Promise<ArenaRoom>) => {
     setArenaError("");
@@ -3547,7 +4089,7 @@ function ArenaView({ currentUser }: { currentUser: UserProfile }) {
         password: roomPassword,
         maxPlayers,
         sections: selectedSections,
-        domains: [],
+        domains: selectedDomains,
         skills: selectedSkills,
         questionCount,
       })
@@ -3578,7 +4120,7 @@ function ArenaView({ currentUser }: { currentUser: UserProfile }) {
         userId: currentUser.id,
         maxPlayers,
         sections: selectedSections,
-        domains: [],
+        domains: selectedDomains,
         skills: selectedSkills,
         questionCount,
       })
@@ -3622,40 +4164,62 @@ function ArenaView({ currentUser }: { currentUser: UserProfile }) {
   if (!room) {
     return (
       <section className="arena-page">
-        <div className="arena-hero">
-          <p className="eyebrow">sat4.me Arena</p>
-          <h1>Play SAT battles with friends.</h1>
-          <p>Create a private room, choose Math or Reading & Writing modules, and race through random questions.</p>
+        <div className="arena-hero arena-hero-art">
+          <div className="arena-hero-copy">
+            <p className="eyebrow">sat4.me Arena</p>
+            <h1>Race. Solve.<br />Win the room.</h1>
+            <p>Real-time SAT battles for 2–5 players. Pick a full topic or drill into one exact skill.</p>
+            <div className="arena-hero-facts" aria-label="Arena features">
+              <span><Users size={17} /> Live rooms</span>
+              <span><Trophy size={17} /> Speed scoring</span>
+              <span><BookOpenCheck size={17} /> Answer review</span>
+            </div>
+          </div>
+          <div className="arena-demo-shell" aria-label="Arena product walkthrough">
+            <div className="arena-demo-browser-bar" aria-hidden="true">
+              <span /><span /><span />
+              <em>sat4.me / arena</em>
+              <strong>LIVE DEMO</strong>
+            </div>
+            <video
+              ref={arenaDemoVideoRef}
+              className="arena-demo-video"
+              autoPlay
+              muted
+              loop
+              playsInline
+              preload="metadata"
+              poster="/arena/arena-demo-poster.webp"
+              aria-label="Silent walkthrough showing room creation, topic selection, multiplayer questions, and Arena results"
+            >
+              <source src="/arena/arena-demo.webm" type="video/webm" />
+            </video>
+          </div>
         </div>
         <div className="arena-entry-grid">
-          <article
+          <button type="button"
             className={arenaMode === "create" ? "arena-entry-card active" : "arena-entry-card"}
-            role="button"
-            tabIndex={0}
             onClick={() => setArenaMode("create")}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") setArenaMode("create");
-            }}
           >
-            <strong>Create room</strong>
-            <p>Host chooses question type, modules, player limit, and starts the match.</p>
-          </article>
-          <article
+            <span className="arena-entry-copy"><em>Host match</em><strong>Create a room</strong><small>Choose the challenge and invite friends.</small></span>
+            <span className="arena-entry-arrow"><ChevronRight size={19} /></span>
+          </button>
+          <button type="button"
             className={arenaMode === "join" ? "arena-entry-card active" : "arena-entry-card"}
-            role="button"
-            tabIndex={0}
             onClick={() => setArenaMode("join")}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") setArenaMode("join");
-            }}
           >
-            <strong>Join room</strong>
-            <p>Enter a code and password from your friend to join the lobby.</p>
-          </article>
+            <span className="arena-entry-copy"><em>Room code</em><strong>Join a room</strong><small>Use the code shared by the host.</small></span>
+            <span className="arena-entry-arrow"><ChevronRight size={19} /></span>
+          </button>
         </div>
-        <div className="arena-panel">
-          {arenaMode === "join" && <input value={joinCode} onChange={(event) => setJoinCode(event.target.value.toUpperCase())} placeholder="Room code" />}
-          <input value={roomPassword} onChange={(event) => setRoomPassword(event.target.value)} placeholder="Room password" />
+        <div className="arena-panel arena-setup-panel">
+          <header className="arena-panel-heading">
+            <div><span>{arenaMode === "create" ? "New match" : "Invitation"}</span><h2>{arenaMode === "create" ? "Build your challenge" : "Enter the arena"}</h2></div>
+          </header>
+          <div className="arena-room-fields">
+            {arenaMode === "join" && <label>Room code<input value={joinCode} onChange={(event) => setJoinCode(event.target.value.toUpperCase())} placeholder="ABC123" /></label>}
+            <label>Room password<input type="password" value={roomPassword} onChange={(event) => setRoomPassword(event.target.value)} placeholder="Enter password" /></label>
+          </div>
           {arenaMode === "create" && (
             <ArenaSettings
               selectedSections={selectedSections}
@@ -3666,9 +4230,10 @@ function ArenaView({ currentUser }: { currentUser: UserProfile }) {
               setQuestionCount={setQuestionCount}
               skillOptions={skillOptions}
               moduleGroups={selectedModuleGroups}
+              selectedDomains={selectedDomains}
               selectedSkills={selectedSkills}
+              toggleDomain={toggleArenaDomain}
               toggleSkill={toggleArenaSkill}
-              selectAllSkills={selectAllArenaSkills}
               clearSkills={clearArenaSkills}
             />
           )}
@@ -3693,7 +4258,7 @@ function ArenaView({ currentUser }: { currentUser: UserProfile }) {
           <button className="ghost-button" onClick={() => setRoom(null)}>Leave</button>
         </div>
         <div className="arena-layout">
-          <ArenaScoreboard players={sortedPlayers} />
+          <ArenaScoreboard players={sortedPlayers} totalQuestions={room.totalQuestions} />
           <div className="arena-panel">
             <div className="arena-invite-card">
               <div>
@@ -3714,9 +4279,10 @@ function ArenaView({ currentUser }: { currentUser: UserProfile }) {
                   setQuestionCount={setQuestionCount}
                   skillOptions={skillOptions}
                   moduleGroups={selectedModuleGroups}
+                  selectedDomains={selectedDomains}
                   selectedSkills={selectedSkills}
+                  toggleDomain={toggleArenaDomain}
                   toggleSkill={toggleArenaSkill}
-                  selectAllSkills={selectAllArenaSkills}
                   clearSkills={clearArenaSkills}
                 />
                 {arenaError && <p className="form-error">{arenaError}</p>}
@@ -3750,7 +4316,7 @@ function ArenaView({ currentUser }: { currentUser: UserProfile }) {
         <button className="ghost-button" onClick={() => setRoom(null)}>Exit arena</button>
       </div>
       <div className="arena-layout">
-        <ArenaScoreboard players={sortedPlayers} />
+        <ArenaScoreboard players={sortedPlayers} totalQuestions={room.totalQuestions} />
         {room.status === "finished" ? (
           <div className="arena-panel arena-review-panel">
             <div className="arena-winner compact">
@@ -3883,7 +4449,14 @@ function ArenaView({ currentUser }: { currentUser: UserProfile }) {
             {arenaFeedback && <p className="arena-feedback">{arenaFeedback}</p>}
             {arenaError && <p className="form-error">{arenaError}</p>}
           </div>
-        ) : null}
+        ) : (
+          <div className="arena-panel arena-finished-waiting" role="status" aria-live="polite">
+            <span><Check size={28} /></span>
+            <h2>You finished the race</h2>
+            <p>Your answers are locked in. Results will appear as soon as the other players finish.</p>
+            <div className="arena-waiting-pulse"><i /><i /><i /></div>
+          </div>
+        )}
       </div>
     </section>
   );
@@ -3898,9 +4471,10 @@ function ArenaSettings({
   setQuestionCount,
   skillOptions,
   moduleGroups,
+  selectedDomains,
   selectedSkills,
+  toggleDomain,
   toggleSkill,
-  selectAllSkills,
   clearSkills,
 }: {
   selectedSections: Section[];
@@ -3911,18 +4485,18 @@ function ArenaSettings({
   setQuestionCount: (value: number) => void;
   skillOptions: string[];
   moduleGroups: Array<{ section: Section; domain: string; skills: string[] }>;
+  selectedDomains: string[];
   selectedSkills: string[];
+  toggleDomain: (domain: string, skills: string[]) => void;
   toggleSkill: (skill: string) => void;
-  selectAllSkills: () => void;
   clearSkills: () => void;
 }) {
-  const [openGroups, setOpenGroups] = useState<string[]>(() => moduleGroups.slice(0, 2).map((group) => `${group.section}-${group.domain}`));
+  const [openGroups, setOpenGroups] = useState<string[]>([]);
 
   useEffect(() => {
     setOpenGroups((current) => {
       const validKeys = moduleGroups.map((group) => `${group.section}-${group.domain}`);
-      const next = current.filter((key) => validKeys.includes(key));
-      return next.length ? next : validKeys.slice(0, 2);
+      return current.filter((key) => validKeys.includes(key));
     });
   }, [moduleGroups]);
 
@@ -3932,58 +4506,72 @@ function ArenaSettings({
 
   return (
     <div className="arena-settings">
-      <div className="arena-setting-row">
-        <button className={selectedSections.includes("Math") ? "chip active" : "chip"} onClick={() => toggleSection("Math")}>Math</button>
-        <button className={selectedSections.includes("Verbal") ? "chip active" : "chip"} onClick={() => toggleSection("Verbal")}>Reading & Writing</button>
+      <div className="arena-setting-section">
+        <div className="arena-setting-title"><span>1</span><div><strong>Sections</strong><small>Mix both or focus on one.</small></div></div>
+        <div className="arena-setting-row arena-section-switcher">
+          <button type="button" className={selectedSections.includes("Math") ? "chip active" : "chip"} onClick={() => toggleSection("Math")}><Calculator size={16} /> Math</button>
+          <button type="button" className={selectedSections.includes("Verbal") ? "chip active" : "chip"} onClick={() => toggleSection("Verbal")}><BookOpenCheck size={16} /> Reading & Writing</button>
+        </div>
       </div>
-      <div className="arena-setting-row">
-        <label>Players<input type="number" min="2" max="5" value={maxPlayers} onChange={(event) => setMaxPlayers(Number(event.target.value))} /></label>
-        <label>Questions<input type="number" min="3" max="30" value={questionCount} onChange={(event) => setQuestionCount(Number(event.target.value))} /></label>
+      <div className="arena-setting-section">
+        <div className="arena-setting-title"><span>2</span><div><strong>Match size</strong><small>Set the lobby and race length.</small></div></div>
+        <div className="arena-setting-row arena-number-fields">
+          <label>Players<input type="number" min="2" max="5" value={maxPlayers} onChange={(event) => setMaxPlayers(Number(event.target.value))} /></label>
+          <label>Questions<input type="number" min="3" max="30" value={questionCount} onChange={(event) => setQuestionCount(Number(event.target.value))} /></label>
+        </div>
       </div>
-      <div className="arena-module-toolbar">
-        <button className="ghost-button" onClick={selectAllSkills}>Select all modules</button>
-        <button className="ghost-button" onClick={clearSkills}>Clear</button>
-        <span>{selectedSkills.length}/{skillOptions.length} selected</span>
-      </div>
-      <div className="arena-accordion">
-        {moduleGroups.map((group) => {
-          const key = `${group.section}-${group.domain}`;
-          const open = openGroups.includes(key);
-          const selectedInGroup = group.skills.filter((skill) => selectedSkills.includes(skill)).length;
-          return (
-            <article key={key} className={open ? "arena-accordion-item open" : "arena-accordion-item"}>
-              <button className="arena-accordion-trigger" onClick={() => toggleGroup(key)}>
-                <span>{group.section}</span>
-                <strong>{group.domain}</strong>
-                <em>{selectedInGroup}/{group.skills.length}</em>
-                <ChevronRight size={17} />
-              </button>
-              <div className="arena-accordion-content">
-                {group.skills.map((skill) => (
-                  <button key={`${key}-${skill}`} className={selectedSkills.includes(skill) ? "arena-skill active" : "arena-skill"} onClick={() => toggleSkill(skill)}>
-                    {skill}
+      <div className="arena-setting-section">
+        <div className="arena-setting-title arena-topic-heading">
+          <span>3</span><div><strong>Challenge topics</strong><small>Select a whole topic or open it to choose exact skills.</small></div>
+          {(selectedDomains.length > 0 || selectedSkills.length > 0) && <button type="button" onClick={clearSkills}>Clear</button>}
+        </div>
+        <div className="arena-selection-summary" aria-live="polite">
+          <strong>{selectedDomains.length + selectedSkills.length ? `${selectedDomains.length + selectedSkills.length} selected` : "All topics"}</strong>
+          <span>{selectedDomains.length + selectedSkills.length ? "Questions will come from the selected topics and skills." : `All ${skillOptions.length} skills in the chosen sections are included.`}</span>
+        </div>
+        <div className="arena-accordion">
+          {moduleGroups.map((group) => {
+            const key = `${group.section}-${group.domain}`;
+            const open = openGroups.includes(key);
+            const domainSelected = selectedDomains.includes(group.domain);
+            const selectedInGroup = group.skills.filter((skill) => selectedSkills.includes(skill)).length;
+            return (
+              <article key={key} className={["arena-accordion-item", open ? "open" : "", domainSelected ? "selected" : ""].join(" ")}>
+                <div className="arena-accordion-trigger">
+                  <button type="button" className="arena-domain-select" aria-pressed={domainSelected} onClick={() => toggleDomain(group.domain, group.skills)}>
+                    <span className="arena-domain-check">{domainSelected ? <Check size={16} /> : null}</span>
+                    <span><small>{group.section === "Math" ? "Math" : "Reading & Writing"}</small><strong>{group.domain}</strong></span>
                   </button>
-                ))}
-              </div>
-            </article>
-          );
-        })}
+                  <span className="arena-topic-count">{domainSelected ? "Whole topic" : selectedInGroup ? `${selectedInGroup} skills` : `${group.skills.length} skills`}</span>
+                  <button type="button" className="arena-expand-button" aria-expanded={open} aria-label={`${open ? "Close" : "Open"} ${group.domain}`} onClick={() => toggleGroup(key)}><ChevronRight size={18} /></button>
+                </div>
+                <div className="arena-accordion-content" hidden={!open}>
+                  {group.skills.map((skill) => (
+                    <button type="button" key={`${key}-${skill}`} className={selectedSkills.includes(skill) ? "arena-skill active" : "arena-skill"} aria-pressed={selectedSkills.includes(skill)} onClick={() => toggleSkill(skill)}>
+                      <span>{selectedSkills.includes(skill) ? <Check size={14} /> : null}</span>{skill}
+                    </button>
+                  ))}
+                </div>
+              </article>
+            );
+          })}
+        </div>
       </div>
-      <small>{selectedSkills.length ? "Only selected modules will be used." : "No module selected = all modules in selected sections."}</small>
     </div>
   );
 }
 
-function ArenaScoreboard({ players }: { players: ArenaRoom["players"] }) {
+function ArenaScoreboard({ players, totalQuestions }: { players: ArenaRoom["players"]; totalQuestions: number }) {
+  const total = Math.max(1, totalQuestions);
   return (
     <aside className="arena-scoreboard">
       <h2>Leaderboard</h2>
       {players.map((player, index) => (
         <div key={player.userId} className="arena-player-row">
           <span>{index + 1}</span>
-          <strong>{player.nickname}{player.isHost ? " · host" : ""}</strong>
+          <div><strong>{player.nickname}{player.isHost ? " · host" : ""}</strong><small>{player.finished ? "Finished" : `${player.progress}/${total} solved`}</small></div>
           <em>{player.score}</em>
-          <i className={player.answeredCurrent ? "ready" : ""} />
+          <i className={player.finished ? "ready" : ""} />
         </div>
       ))}
     </aside>
@@ -4385,6 +4973,8 @@ function StudyRoomDock({
   );
 }
 
+const VOCAB_MATCH_DURATION_SECONDS = 15;
+
 function VocabularyView() {
   const [learningMode, setLearningMode] = useState<VocabularyMode>("flashcards");
   const [collectionMode, setCollectionMode] = useState<"all" | "favorites">("all");
@@ -4403,13 +4993,16 @@ function VocabularyView() {
   const [selectedMatchWord, setSelectedMatchWord] = useState("");
   const [matchedWords, setMatchedWords] = useState<string[]>([]);
   const [matchingMistakes, setMatchingMistakes] = useState(0);
-  const [matchingStartedAt, setMatchingStartedAt] = useState(Date.now());
-  const [matchingSeconds, setMatchingSeconds] = useState(0);
-  const [matchingComplete, setMatchingComplete] = useState(false);
-  const [matchingFeedback, setMatchingFeedback] = useState("Choose a word, then choose its definition.");
+  const [matchingStartedAt, setMatchingStartedAt] = useState(0);
+  const [matchingSeconds, setMatchingSeconds] = useState(VOCAB_MATCH_DURATION_SECONDS);
+  const [matchingPhase, setMatchingPhase] = useState<"ready" | "playing" | "complete">("ready");
+  const [matchingFeedback, setMatchingFeedback] = useState("Press Start when you are ready.");
   const [matchingFeedbackTone, setMatchingFeedbackTone] = useState<"neutral" | "error" | "success">("neutral");
   const [wrongMatchWord, setWrongMatchWord] = useState("");
   const [wrongDefinitionWord, setWrongDefinitionWord] = useState("");
+  const matchingBoardRef = useRef<HTMLDivElement>(null);
+  const [matchingPointerVine, setMatchingPointerVine] = useState<MatchingVine | null>(null);
+  const [matchingVines, setMatchingVines] = useState<MatchingVine[]>([]);
   const [sentenceIndex, setSentenceIndex] = useState(0);
   const [sentenceInput, setSentenceInput] = useState("");
   const [sentenceFeedback, setSentenceFeedback] = useState<SentenceFeedback | null>(null);
@@ -4450,10 +5043,93 @@ function VocabularyView() {
   }, [libraryPage, libraryPageCount]);
 
   useEffect(() => {
-    if (learningMode !== "matching" || matchingComplete) return;
-    const timer = window.setInterval(() => setMatchingSeconds(Math.floor((Date.now() - matchingStartedAt) / 1000)), 250);
+    if (learningMode !== "matching" || matchingPhase !== "playing" || !matchingStartedAt) return;
+    const updateCountdown = () => {
+      const elapsed = Math.floor((Date.now() - matchingStartedAt) / 1000);
+      const remaining = Math.max(0, VOCAB_MATCH_DURATION_SECONDS - elapsed);
+      setMatchingSeconds(remaining);
+      if (remaining === 0) {
+        setMatchingPhase("complete");
+        setSelectedMatchWord("");
+        setMatchingFeedback("Time is up — start another round when you are ready.");
+        setMatchingFeedbackTone("neutral");
+      }
+    };
+    updateCountdown();
+    const timer = window.setInterval(updateCountdown, 200);
     return () => window.clearInterval(timer);
-  }, [learningMode, matchingComplete, matchingStartedAt]);
+  }, [learningMode, matchingPhase, matchingStartedAt]);
+
+  useEffect(() => {
+    const board = matchingBoardRef.current;
+    if (!board || matchingPhase !== "playing") {
+      setMatchingVines([]);
+      return;
+    }
+
+    const updateVines = () => {
+      const boardRect = board.getBoundingClientRect();
+      const wordButtons = Array.from(board.querySelectorAll<HTMLElement>("[data-match-word]"));
+      const definitionButtons = Array.from(board.querySelectorAll<HTMLElement>("[data-definition-word]"));
+      const findWordButton = (word: string) => wordButtons.find((button) => button.dataset.matchWord === word);
+      const findDefinitionButton = (word: string) => definitionButtons.find((button) => button.dataset.definitionWord === word);
+      const createPath = (word: string, definitionWord: string | null, tone: "selected" | "matched" | "wrong") => {
+        const wordButton = findWordButton(word);
+        if (!wordButton) return null;
+        const wordRect = wordButton.getBoundingClientRect();
+        const startX = wordRect.right - boardRect.left;
+        const startY = wordRect.top + wordRect.height / 2 - boardRect.top;
+        const definitionButton = definitionWord ? findDefinitionButton(definitionWord) : null;
+        const endX = definitionButton ? definitionButton.getBoundingClientRect().left - boardRect.left : startX + 34;
+        const endY = definitionButton ? definitionButton.getBoundingClientRect().top + definitionButton.getBoundingClientRect().height / 2 - boardRect.top : startY;
+        const bend = Math.max(28, (endX - startX) * 0.46);
+        return {
+          key: `${tone}-${word}-${definitionWord ?? "pending"}`,
+          path: `M ${startX} ${startY} C ${startX + bend * 0.48} ${startY - 16}, ${endX - bend * 0.48} ${endY + 16}, ${endX} ${endY}`,
+          endX,
+          endY,
+          tone,
+        };
+      };
+
+      const nextVines = matchedWords.map((word) => createPath(word, word, "matched")).filter(Boolean) as MatchingVine[];
+      if (wrongMatchWord && wrongDefinitionWord) {
+        const wrongVine = createPath(wrongMatchWord, wrongDefinitionWord, "wrong");
+        if (wrongVine) nextVines.push(wrongVine);
+      }
+      setMatchingVines(nextVines);
+    };
+
+    const frame = window.requestAnimationFrame(updateVines);
+    const observer = new ResizeObserver(updateVines);
+    observer.observe(board);
+    window.addEventListener("resize", updateVines);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      observer.disconnect();
+      window.removeEventListener("resize", updateVines);
+    };
+  }, [matchedWords, matchingPhase, matchingRound, wrongDefinitionWord, wrongMatchWord]);
+
+  const updateMatchingPointerVine = (clientX: number, clientY: number, word = selectedMatchWord) => {
+    const board = matchingBoardRef.current;
+    const wordButton = board?.querySelector<HTMLElement>(`[data-match-word="${CSS.escape(word)}"]`);
+    if (!board || !wordButton || !word) return;
+    const boardRect = board.getBoundingClientRect();
+    const wordRect = wordButton.getBoundingClientRect();
+    const startX = wordRect.right - boardRect.left;
+    const startY = wordRect.top + wordRect.height / 2 - boardRect.top;
+    const endX = Math.max(0, Math.min(boardRect.width, clientX - boardRect.left));
+    const endY = Math.max(0, Math.min(boardRect.height, clientY - boardRect.top));
+    const bend = Math.max(28, Math.abs(endX - startX) * 0.46);
+    setMatchingPointerVine({
+      key: `selected-${word}`,
+      path: `M ${startX} ${startY} C ${startX + bend * 0.48} ${startY - 16}, ${endX - bend * 0.48} ${endY + 16}, ${endX} ${endY}`,
+      endX,
+      endY,
+      tone: "selected",
+    });
+  };
 
   const toggleFavorite = (word: string) => {
     const key = word.toLowerCase();
@@ -4475,13 +5151,28 @@ function VocabularyView() {
     setSelectedMatchWord("");
     setMatchedWords([]);
     setMatchingMistakes(0);
-    setMatchingStartedAt(Date.now());
-    setMatchingSeconds(0);
-    setMatchingComplete(false);
-    setMatchingFeedback("Choose a word, then choose its definition.");
+    setMatchingStartedAt(0);
+    setMatchingSeconds(VOCAB_MATCH_DURATION_SECONDS);
+    setMatchingPhase("ready");
+    setMatchingFeedback("Press Start when you are ready.");
     setMatchingFeedbackTone("neutral");
     setWrongMatchWord("");
     setWrongDefinitionWord("");
+    setMatchingPointerVine(null);
+  };
+
+  const startMatchingRound = () => {
+    setSelectedMatchWord("");
+    setMatchedWords([]);
+    setMatchingMistakes(0);
+    setMatchingSeconds(VOCAB_MATCH_DURATION_SECONDS);
+    setMatchingStartedAt(Date.now());
+    setMatchingPhase("playing");
+    setMatchingFeedback("Choose a word, then connect it to its definition.");
+    setMatchingFeedbackTone("neutral");
+    setWrongMatchWord("");
+    setWrongDefinitionWord("");
+    setMatchingPointerVine(null);
   };
 
   const changeLearningMode = (mode: VocabularyMode) => {
@@ -4503,6 +5194,7 @@ function VocabularyView() {
   };
 
   const chooseDefinition = (word: string) => {
+    if (matchingPhase !== "playing") return;
     if (!selectedMatchWord || matchedWords.includes(word)) {
       if (!selectedMatchWord) {
         setMatchingFeedback("Select a word first.");
@@ -4525,9 +5217,9 @@ function VocabularyView() {
     setMatchingFeedbackTone("success");
     setWrongMatchWord("");
     setWrongDefinitionWord("");
+    setMatchingPointerVine(null);
     if (nextMatched.length === matchingRound.length) {
-      setMatchingSeconds(Math.floor((Date.now() - matchingStartedAt) / 1000));
-      setMatchingComplete(true);
+      setMatchingPhase("complete");
     }
   };
 
@@ -4643,21 +5335,95 @@ function VocabularyView() {
       ) : learningMode === "matching" ? (
         <div className="vocab-matching-mode" role="tabpanel">
           <header className="vocab-game-header">
-            <div><span>Speed Match</span><h3>Connect each word to its definition.</h3><p className={matchingFeedbackTone} role={matchingFeedbackTone === "error" ? "alert" : "status"}>{matchingFeedback}</p></div>
-            <div className="vocab-game-stats"><span><Clock3 size={15} /><strong>{matchingSeconds}s</strong>Time</span><span className={matchingMistakes ? "has-error" : ""}><X size={15} /><strong>{matchingMistakes}</strong>Mistakes</span><span><Check size={15} /><strong>{matchedWords.length}/{matchingRound.length}</strong>Matched</span></div>
+            <div>
+              <span>Speed Match</span>
+              <h3>Connect each word to its definition.</h3>
+              <p className={matchingFeedbackTone} role={matchingFeedbackTone === "error" ? "alert" : "status"} aria-live="polite">{matchingFeedback}</p>
+            </div>
+            <div className="vocab-game-stats">
+              <span className={matchingPhase === "playing" && matchingSeconds <= 5 ? "is-urgent" : ""}><Clock3 size={15} /><strong>{matchingSeconds}s</strong>Cooldown</span>
+              <span className={matchingMistakes ? "has-error" : ""}><X size={15} /><strong>{matchingMistakes}</strong>Mistakes</span>
+              <span><Check size={15} /><strong>{matchedWords.length}/{matchingRound.length}</strong>Matched</span>
+            </div>
           </header>
-          {matchingComplete ? (
+          {matchingPhase === "ready" ? (
+            <div className="vocab-game-ready">
+              <div className="vocab-ready-orbit" aria-hidden="true"><span>15</span><small>seconds</small></div>
+              <span>Quick recognition round</span>
+              <h3>Five pairs. One short sprint.</h3>
+              <p>The cooldown begins only after you press Start. Pick a word, then choose its meaning—the vine will hold every connection.</p>
+              <div className="vocab-ready-rules" aria-label="Round rules">
+                <span><strong>01</strong>Select a word</span>
+                <span><strong>02</strong>Connect its meaning</span>
+                <span><strong>03</strong>Finish before zero</span>
+              </div>
+              <button onClick={startMatchingRound}><Rocket size={17} />Start 15-second round</button>
+            </div>
+          ) : matchingPhase === "complete" ? (
             <div className="vocab-game-complete" role="status">
-              <div><Check size={24} /></div>
-              <span>Round complete</span>
-              <h3>{matchingSeconds} seconds · {matchingMistakes} {matchingMistakes === 1 ? "mistake" : "mistakes"}</h3>
-              <p>Run another set to improve recognition speed.</p>
-              <button onClick={resetMatchingRound}><RotateCcw size={16} />Play another round</button>
+              <div>{matchedWords.length === matchingRound.length ? <Check size={24} /> : <Clock3 size={24} />}</div>
+              <h3>{matchedWords.length === matchingRound.length ? `Good job ${matchingRound.length}/${matchingRound.length}` : `Try again ${matchedWords.length}/${matchingRound.length}`}</h3>
+              <button onClick={resetMatchingRound}><RotateCcw size={16} />{matchedWords.length === matchingRound.length ? "Next round" : "Try again"}</button>
             </div>
           ) : (
-            <div className="vocab-match-board">
-              <section><h4>Words</h4>{matchingRound.map((card) => <button key={card.word} disabled={matchedWords.includes(card.word)} className={wrongMatchWord === card.word ? "wrong" : selectedMatchWord === card.word ? "selected" : matchedWords.includes(card.word) ? "matched" : ""} onClick={() => { setSelectedMatchWord(card.word); setWrongMatchWord(""); setWrongDefinitionWord(""); setMatchingFeedbackTone("neutral"); setMatchingFeedback(`Now choose the meaning of “${card.word}”.`); }}>{card.word}<span className={`vocab-difficulty ${getVocabularyDifficulty(card).toLowerCase()}`}>{getVocabularyDifficulty(card)}</span></button>)}</section>
-              <section><h4>Definitions</h4>{matchingDefinitions.map((card) => <button key={card.word} disabled={matchedWords.includes(card.word)} className={wrongDefinitionWord === card.word ? "wrong" : matchedWords.includes(card.word) ? "matched" : ""} onClick={() => chooseDefinition(card.word)}>{card.meaning}{matchedWords.includes(card.word) && <Check size={16} />}</button>)}</section>
+            <div
+              className="vocab-match-board"
+              ref={matchingBoardRef}
+              onPointerMove={(event) => {
+                if (!selectedMatchWord || wrongDefinitionWord) return;
+                updateMatchingPointerVine(event.clientX, event.clientY);
+              }}
+            >
+              <svg className="vocab-vine-layer" aria-hidden="true">
+                {[...matchingVines, ...(selectedMatchWord && !wrongDefinitionWord && matchingPointerVine ? [matchingPointerVine] : [])].map((vine) => (
+                  <g key={vine.key} className={`vocab-vine ${vine.tone}`}>
+                    <path className="vocab-vine-shadow" d={vine.path} />
+                    <path className="vocab-vine-stem" d={vine.path} pathLength="1" />
+                    <ellipse className="vocab-vine-leaf leaf-one" cx={vine.endX - 15} cy={vine.endY - 7} rx="7" ry="3.5" />
+                    <ellipse className="vocab-vine-leaf leaf-two" cx={vine.endX - 7} cy={vine.endY + 7} rx="6" ry="3" />
+                  </g>
+                ))}
+              </svg>
+              <section>
+                <h4>Words</h4>
+                {matchingRound.map((card) => (
+                  <button
+                    key={card.word}
+                    data-match-word={card.word}
+                    disabled={matchedWords.includes(card.word)}
+                    aria-pressed={selectedMatchWord === card.word}
+                    className={wrongMatchWord === card.word ? "wrong" : selectedMatchWord === card.word ? "selected" : matchedWords.includes(card.word) ? "matched" : ""}
+                    onClick={(event) => {
+                      setSelectedMatchWord(card.word);
+                      updateMatchingPointerVine(event.clientX, event.clientY, card.word);
+                      setWrongMatchWord("");
+                      setWrongDefinitionWord("");
+                      setMatchingFeedbackTone("neutral");
+                      setMatchingFeedback(`Now choose the meaning of “${card.word}”.`);
+                    }}
+                  >
+                    <span className="vocab-match-word-copy">{card.word}</span>
+                    <span className={`vocab-difficulty ${getVocabularyDifficulty(card).toLowerCase()}`}>{getVocabularyDifficulty(card)}</span>
+                    <i className="vocab-vine-node" aria-hidden="true" />
+                  </button>
+                ))}
+              </section>
+              <section>
+                <h4>Definitions</h4>
+                {matchingDefinitions.map((card) => (
+                  <button
+                    key={card.word}
+                    data-definition-word={card.word}
+                    disabled={matchedWords.includes(card.word)}
+                    className={wrongDefinitionWord === card.word ? "wrong" : matchedWords.includes(card.word) ? "matched" : ""}
+                    onClick={() => chooseDefinition(card.word)}
+                  >
+                    <i className="vocab-vine-node" aria-hidden="true" />
+                    <span>{card.meaning}</span>
+                    {matchedWords.includes(card.word) && <Check size={16} aria-hidden="true" />}
+                  </button>
+                ))}
+              </section>
             </div>
           )}
         </div>

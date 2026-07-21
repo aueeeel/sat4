@@ -421,7 +421,54 @@ const initializePostgres = async () => {
       created_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS arena_rooms (
+      id TEXT PRIMARY KEY,
+      code TEXT NOT NULL UNIQUE,
+      password TEXT NOT NULL,
+      host_user_id TEXT NOT NULL,
+      max_players INTEGER NOT NULL DEFAULT 2,
+      section TEXT NOT NULL DEFAULT 'Math',
+      sections_json TEXT NOT NULL DEFAULT '["Math"]',
+      domains_json TEXT NOT NULL DEFAULT '[]',
+      skills_json TEXT NOT NULL DEFAULT '[]',
+      question_count INTEGER NOT NULL DEFAULT 10,
+      question_ids_json TEXT NOT NULL DEFAULT '[]',
+      current_index INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'waiting',
+      elo_awarded INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      started_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS arena_players (
+      id TEXT PRIMARY KEY,
+      room_id TEXT NOT NULL REFERENCES arena_rooms(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL,
+      nickname TEXT NOT NULL,
+      score INTEGER NOT NULL DEFAULT 0,
+      joined_at TEXT NOT NULL,
+      UNIQUE(room_id, user_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS arena_answers (
+      id TEXT PRIMARY KEY,
+      room_id TEXT NOT NULL REFERENCES arena_rooms(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL,
+      question_id TEXT NOT NULL,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      correct INTEGER NOT NULL DEFAULT 0,
+      score_awarded INTEGER NOT NULL DEFAULT 0,
+      elapsed_ms INTEGER NOT NULL DEFAULT 0,
+      selected_index INTEGER,
+      free_response TEXT,
+      cooldown_until TEXT,
+      answered_at TEXT,
+      UNIQUE(room_id, user_id, question_id)
+    );
+
     CREATE UNIQUE INDEX IF NOT EXISTS users_public_id_idx ON users(public_id);
+    CREATE INDEX IF NOT EXISTS arena_players_room_idx ON arena_players(room_id);
+    CREATE INDEX IF NOT EXISTS arena_answers_room_user_idx ON arena_answers(room_id, user_id);
   `);
 };
 
@@ -441,7 +488,7 @@ const backfillPublicIdsPg = async () => {
 };
 
 await initializePostgres();
-await backfillPublicIdsPg();
+if (usePostgres) { await backfillPublicIdsPg(); }
 
 const getUserByIdPg = async (id) => (await pgQuery("SELECT * FROM users WHERE id = $1", [id])).rows[0] ?? null;
 const getUserByGmailPg = async (gmail) => (await pgQuery("SELECT * FROM users WHERE gmail = $1", [gmail])).rows[0] ?? null;
@@ -643,23 +690,185 @@ const publicRoom = (room, userId) => {
     totalQuestions: questionIds.length || room.question_count,
     currentQuestion: currentQuestion ? publicQuestion(currentQuestion) : null,
     review,
-    players: players.map((player) => ({
-      userId: player.user_id,
-      nickname: player.nickname,
-      score: player.score,
-      isHost: player.user_id === room.host_user_id,
-      answeredCurrent: questionIds.every((questionId) => getAnswerRecord.get(room.id, player.user_id, questionId)?.correct),
-    })),
+    players: players.map((player) => {
+      const progress = questionIds.filter((questionId) => getAnswerRecord.get(room.id, player.user_id, questionId)?.correct).length;
+      const finished = Boolean(questionIds.length) && progress >= questionIds.length;
+      return {
+        userId: player.user_id,
+        nickname: player.nickname,
+        score: player.score,
+        isHost: player.user_id === room.host_user_id,
+        answeredCurrent: finished,
+        progress,
+        finished,
+      };
+    }),
     winner: winner ? { userId: winner.user_id, nickname: winner.nickname, score: winner.score } : null,
   };
+};
+
+const createUniqueRoomCodePg = async () => {
+  let code = randomRoomCode();
+  while ((await pgQuery("SELECT 1 FROM arena_rooms WHERE code = $1", [code])).rowCount) code = randomRoomCode();
+  return code;
+};
+
+const getArenaRoomPg = async ({ roomId, code }) => {
+  const result = roomId
+    ? await pgQuery("SELECT * FROM arena_rooms WHERE id = $1", [roomId])
+    : await pgQuery("SELECT * FROM arena_rooms WHERE code = $1", [String(code ?? "").toUpperCase()]);
+  return result.rows[0] ?? null;
+};
+
+const publicRoomPg = async (room, userId) => {
+  const players = (await pgQuery("SELECT * FROM arena_players WHERE room_id = $1 ORDER BY joined_at ASC", [room.id])).rows;
+  const answers = (await pgQuery("SELECT * FROM arena_answers WHERE room_id = $1", [room.id])).rows;
+  const answerByUserAndQuestion = new Map(answers.map((answer) => [`${answer.user_id}:${answer.question_id}`, answer]));
+  const questionIds = parseJson(room.question_ids_json, []);
+  const answerFor = (playerId, questionId) => answerByUserAndQuestion.get(`${playerId}:${questionId}`);
+  const userCurrentIndex = room.status === "playing"
+    ? questionIds.findIndex((questionId) => !answerFor(userId, questionId)?.correct)
+    : room.current_index;
+  const currentQuestionId = userCurrentIndex >= 0 ? questionIds[userCurrentIndex] : undefined;
+  const currentQuestion = currentQuestionId ? questionById.get(currentQuestionId) : null;
+  const winner = room.status === "finished" ? [...players].sort((a, b) => b.score - a.score)[0] ?? null : null;
+  const sections = normalizeSections(parseJson(room.sections_json, [room.section]), room.section);
+  const review = room.status === "finished"
+    ? questionIds.map((questionId, index) => {
+        const question = questionById.get(questionId);
+        if (!question) return null;
+        const answer = answerFor(userId, questionId);
+        return {
+          ...publicQuestion(question),
+          index,
+          correctAnswer: question.correctAnswer,
+          correctIndex: question.choices.findIndex((choice) => choice === question.correctAnswer),
+          selectedIndex: answer?.selected_index ?? null,
+          freeResponse: answer?.free_response ?? "",
+          correct: Boolean(answer?.correct),
+          attempts: answer?.attempts ?? 0,
+          scoreAwarded: answer?.score_awarded ?? 0,
+        };
+      }).filter(Boolean)
+    : [];
+
+  return {
+    id: room.id,
+    code: room.code,
+    isHost: room.host_user_id === userId,
+    hostUserId: room.host_user_id,
+    maxPlayers: room.max_players,
+    section: sections.length === 1 ? sections[0] : "Mixed",
+    sections,
+    domains: parseJson(room.domains_json, []),
+    skills: parseJson(room.skills_json, []),
+    questionCount: room.question_count,
+    status: room.status,
+    currentIndex: userCurrentIndex >= 0 ? userCurrentIndex : questionIds.length,
+    totalQuestions: questionIds.length || room.question_count,
+    currentQuestion: currentQuestion ? publicQuestion(currentQuestion) : null,
+    review,
+    players: players.map((player) => {
+      const progress = questionIds.filter((questionId) => answerFor(player.user_id, questionId)?.correct).length;
+      const finished = Boolean(questionIds.length) && progress >= questionIds.length;
+      return {
+        userId: player.user_id,
+        nickname: player.nickname,
+        score: player.score,
+        isHost: player.user_id === room.host_user_id,
+        answeredCurrent: finished,
+        progress,
+        finished,
+      };
+    }),
+    winner: winner ? { userId: winner.user_id, nickname: winner.nickname, score: winner.score } : null,
+  };
+};
+
+const answerArenaQuestionPg = async ({ roomId, userId, questionId, elapsedMs, body }) => {
+  const client = await pgPool.connect();
+  try {
+    await client.query("BEGIN");
+    const room = (await client.query("SELECT * FROM arena_rooms WHERE id=$1 FOR UPDATE", [roomId])).rows[0];
+    const player = room ? (await client.query("SELECT * FROM arena_players WHERE room_id=$1 AND user_id=$2", [roomId, userId])).rows[0] : null;
+    const question = questionById.get(questionId);
+    if (!room || !player || !question || room.status !== "playing") {
+      await client.query("ROLLBACK");
+      return { status: 400, payload: { error: "Game is not ready." } };
+    }
+
+    const questionIds = parseJson(room.question_ids_json, []);
+    const correctRows = (await client.query("SELECT question_id FROM arena_answers WHERE room_id=$1 AND user_id=$2 AND correct=1", [roomId, userId])).rows;
+    const correctIds = new Set(correctRows.map((row) => row.question_id));
+    const activeQuestionId = questionIds.find((id) => !correctIds.has(id));
+    if (activeQuestionId !== questionId) {
+      await client.query("ROLLBACK");
+      return { status: 409, payload: { error: "This is not the active question." } };
+    }
+
+    const previous = (await client.query("SELECT * FROM arena_answers WHERE room_id=$1 AND user_id=$2 AND question_id=$3 FOR UPDATE", [roomId, userId, questionId])).rows[0];
+    if (previous?.correct) {
+      await client.query("COMMIT");
+      const freshRoom = await getArenaRoomPg({ roomId });
+      return { status: 200, payload: { correct: true, attempts: previous.attempts, scoreAwarded: 0, room: await publicRoomPg(freshRoom, userId) } };
+    }
+    if (previous?.cooldown_until && new Date(previous.cooldown_until).getTime() > Date.now()) {
+      const waitMs = new Date(previous.cooldown_until).getTime() - Date.now();
+      await client.query("ROLLBACK");
+      return { status: 429, payload: { error: "Wait before trying again.", waitMs } };
+    }
+
+    const attempts = (previous?.attempts ?? 0) + 1;
+    const correct = isCorrectArenaAnswer(question, body);
+    const scoreAwarded = correct ? calculateScore(elapsedMs, attempts - 1) : 0;
+    const cooldownUntil = correct ? null : new Date(Date.now() + 15_000).toISOString();
+    const selectedIndex = typeof body.selectedIndex === "number" ? body.selectedIndex : null;
+    const submittedFreeResponse = selectedIndex === null ? String(body.freeResponse ?? body.answer ?? "") : "";
+    await client.query(
+      `INSERT INTO arena_answers (id,room_id,user_id,question_id,attempts,correct,score_awarded,elapsed_ms,selected_index,free_response,cooldown_until,answered_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+       ON CONFLICT (room_id,user_id,question_id) DO UPDATE SET attempts=EXCLUDED.attempts, correct=EXCLUDED.correct,
+       score_awarded=EXCLUDED.score_awarded, elapsed_ms=EXCLUDED.elapsed_ms, selected_index=EXCLUDED.selected_index,
+       free_response=EXCLUDED.free_response, cooldown_until=EXCLUDED.cooldown_until, answered_at=EXCLUDED.answered_at`,
+      [randomUUID(), roomId, userId, questionId, attempts, correct ? 1 : 0, scoreAwarded, elapsedMs, selectedIndex, submittedFreeResponse, cooldownUntil, new Date().toISOString()]
+    );
+    await client.query("UPDATE arena_players SET score=GREATEST(0,score+$1) WHERE room_id=$2 AND user_id=$3", [correct ? scoreAwarded : -250, roomId, userId]);
+
+    if (correct) {
+      const players = (await client.query("SELECT * FROM arena_players WHERE room_id=$1 ORDER BY score DESC", [roomId])).rows;
+      const progressRows = (await client.query("SELECT user_id,COUNT(*)::int AS progress FROM arena_answers WHERE room_id=$1 AND correct=1 GROUP BY user_id", [roomId])).rows;
+      const progressByUser = new Map(progressRows.map((row) => [row.user_id, Number(row.progress)]));
+      const everyoneFinished = players.length > 0 && players.every((arenaPlayer) => (progressByUser.get(arenaPlayer.user_id) ?? 0) >= questionIds.length);
+      if (everyoneFinished) {
+        if (!room.elo_awarded) {
+          for (let index = 0; index < players.length; index += 1) {
+            await client.query("UPDATE users SET elo=GREATEST(0,elo+$1) WHERE id=$2", [index === 0 ? 10 : 3, players[index].user_id]);
+          }
+          await client.query("UPDATE arena_rooms SET elo_awarded=1 WHERE id=$1", [roomId]);
+        }
+        await client.query("UPDATE arena_rooms SET status='finished' WHERE id=$1", [roomId]);
+      } else {
+        const slowestProgress = players.length ? Math.min(...players.map((arenaPlayer) => progressByUser.get(arenaPlayer.user_id) ?? 0)) : 0;
+        await client.query("UPDATE arena_rooms SET current_index=$1 WHERE id=$2", [slowestProgress, roomId]);
+      }
+    }
+    await client.query("COMMIT");
+    const freshRoom = await getArenaRoomPg({ roomId });
+    return { status: 200, payload: { correct, attempts, scoreAwarded, waitMs: correct ? 0 : 15_000, room: await publicRoomPg(freshRoom, userId) } };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 };
 
 const pickQuestions = ({ sections, domains, skills, count }) => {
   const filtered = questionBank.filter((question) => {
     const matchesSection = sections.includes(question.section);
-    const matchesDomain = !domains.length || domains.includes(question.domain);
-    const matchesSkill = !skills.length || skills.includes(question.skill);
-    return matchesSection && matchesDomain && matchesSkill;
+    const hasTopicFilter = domains.length > 0 || skills.length > 0;
+    const matchesTopic = !hasTopicFilter || domains.includes(question.domain) || skills.includes(question.skill);
+    return matchesSection && matchesTopic;
   });
   return [...filtered].sort(() => Math.random() - 0.5).slice(0, count).map((question) => question.id);
 };
@@ -1110,6 +1319,23 @@ const server = createServer(async (request, response) => {
       }
 
       const id = randomUUID();
+      if (usePostgres) {
+        const code = await createUniqueRoomCodePg();
+        const now = new Date().toISOString();
+        await pgQuery(
+          `INSERT INTO arena_rooms (id, code, password, host_user_id, max_players, section, sections_json, domains_json, skills_json, question_count, created_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+          [id, code, password, userId, maxPlayers, section, JSON.stringify(sections), JSON.stringify(domains), JSON.stringify(skills), questionCount, now]
+        );
+        await pgQuery(
+          `INSERT INTO arena_players (id, room_id, user_id, nickname, joined_at) VALUES ($1,$2,$3,$4,$5)
+           ON CONFLICT (room_id, user_id) DO NOTHING`,
+          [randomUUID(), id, userId, nickname || "Host", now]
+        );
+        const room = await getArenaRoomPg({ roomId: id });
+        json(response, 201, { room: await publicRoomPg(room, userId) });
+        return;
+      }
       const code = createUniqueRoomCode();
       const now = new Date().toISOString();
       insertRoom.run(id, code, password, userId, maxPlayers, section, JSON.stringify(sections), JSON.stringify(domains), JSON.stringify(skills), questionCount, now);
@@ -1124,6 +1350,30 @@ const server = createServer(async (request, response) => {
       const nickname = String(body.nickname ?? "Player").trim().slice(0, 32);
       const code = String(body.code ?? "").trim().toUpperCase();
       const password = String(body.password ?? "").trim();
+      if (usePostgres) {
+        const room = await getArenaRoomPg({ code });
+        if (!room || room.password !== password) {
+          json(response, 404, { error: "Room code or password is wrong." });
+          return;
+        }
+        if (room.status !== "waiting") {
+          json(response, 409, { error: "This game already started." });
+          return;
+        }
+        const existing = await pgQuery("SELECT 1 FROM arena_players WHERE room_id = $1 AND user_id = $2", [room.id, userId]);
+        const count = Number((await pgQuery("SELECT COUNT(*) AS count FROM arena_players WHERE room_id = $1", [room.id])).rows[0]?.count ?? 0);
+        if (!existing.rowCount && count >= room.max_players) {
+          json(response, 409, { error: "Room is full." });
+          return;
+        }
+        await pgQuery(
+          `INSERT INTO arena_players (id, room_id, user_id, nickname, joined_at) VALUES ($1,$2,$3,$4,$5)
+           ON CONFLICT (room_id, user_id) DO UPDATE SET nickname = EXCLUDED.nickname`,
+          [randomUUID(), room.id, userId, nickname || "Player", new Date().toISOString()]
+        );
+        json(response, 200, { room: await publicRoomPg(room, userId) });
+        return;
+      }
       const room = getRoomByCode.get(code);
 
       if (!room || room.password !== password) {
@@ -1154,12 +1404,45 @@ const server = createServer(async (request, response) => {
       const domains = Array.isArray(body.domains) ? body.domains.map(String) : [];
       const skills = Array.isArray(body.skills) ? body.skills.map(String) : [];
       const questionCount = Math.min(30, Math.max(3, Number(body.questionCount ?? 10)));
-      updateRoomConfig.run(maxPlayers, section, JSON.stringify(sections), JSON.stringify(domains), JSON.stringify(skills), questionCount, roomId, userId);
-      const room = getRoomById.get(roomId);
-      if (!room) {
+      if (usePostgres) {
+        const existingRoom = await getArenaRoomPg({ roomId });
+        if (!existingRoom) {
+          json(response, 404, { error: "Room not found." });
+          return;
+        }
+        if (existingRoom.host_user_id !== userId || existingRoom.status !== "waiting") {
+          json(response, 403, { error: "Only the host can change a waiting room." });
+          return;
+        }
+        const playerCount = Number((await pgQuery("SELECT COUNT(*) AS count FROM arena_players WHERE room_id = $1", [roomId])).rows[0]?.count ?? 0);
+        if (playerCount > maxPlayers) {
+          json(response, 409, { error: "Player limit cannot be lower than the current lobby size." });
+          return;
+        }
+        await pgQuery(
+          `UPDATE arena_rooms SET max_players=$1, section=$2, sections_json=$3, domains_json=$4, skills_json=$5, question_count=$6
+           WHERE id=$7 AND host_user_id=$8 AND status='waiting'`,
+          [maxPlayers, section, JSON.stringify(sections), JSON.stringify(domains), JSON.stringify(skills), questionCount, roomId, userId]
+        );
+        const room = await getArenaRoomPg({ roomId });
+        json(response, 200, { room: await publicRoomPg(room, userId) });
+        return;
+      }
+      const existingRoom = getRoomById.get(roomId);
+      if (!existingRoom) {
         json(response, 404, { error: "Room not found." });
         return;
       }
+      if (existingRoom.host_user_id !== userId || existingRoom.status !== "waiting") {
+        json(response, 403, { error: "Only the host can change a waiting room." });
+        return;
+      }
+      if (countPlayers.get(roomId).count > maxPlayers) {
+        json(response, 409, { error: "Player limit cannot be lower than the current lobby size." });
+        return;
+      }
+      updateRoomConfig.run(maxPlayers, section, JSON.stringify(sections), JSON.stringify(domains), JSON.stringify(skills), questionCount, roomId, userId);
+      const room = getRoomById.get(roomId);
       json(response, 200, { room: publicRoom(room, userId) });
       return;
     }
@@ -1168,10 +1451,49 @@ const server = createServer(async (request, response) => {
       const body = await readBody(request);
       const roomId = String(body.roomId ?? "");
       const userId = String(body.userId ?? "");
+      if (usePostgres) {
+        const room = await getArenaRoomPg({ roomId });
+        if (!room || room.host_user_id !== userId) {
+          json(response, 403, { error: "Only host can start the game." });
+          return;
+        }
+        if (room.status !== "waiting") {
+          json(response, 409, { error: "This room has already started." });
+          return;
+        }
+        const playerCount = Number((await pgQuery("SELECT COUNT(*) AS count FROM arena_players WHERE room_id = $1", [room.id])).rows[0]?.count ?? 0);
+        if (playerCount < 2) {
+          json(response, 409, { error: "At least two players are required." });
+          return;
+        }
+        const domains = parseJson(room.domains_json, []);
+        const skills = parseJson(room.skills_json, []);
+        const sections = normalizeSections(parseJson(room.sections_json, [room.section]), room.section);
+        const questionIds = pickQuestions({ sections, domains, skills, count: room.question_count });
+        if (!questionIds.length || questionIds.length < room.question_count) {
+          json(response, 400, { error: questionIds.length ? `Only ${questionIds.length} questions match this setup. Choose fewer questions or a broader topic.` : "No questions match this setup." });
+          return;
+        }
+        await pgQuery(
+          "UPDATE arena_rooms SET status='playing', question_ids_json=$1, current_index=0, started_at=$2 WHERE id=$3 AND host_user_id=$4 AND status='waiting'",
+          [JSON.stringify(questionIds), new Date().toISOString(), room.id, userId]
+        );
+        const startedRoom = await getArenaRoomPg({ roomId: room.id });
+        json(response, 200, { room: await publicRoomPg(startedRoom, userId) });
+        return;
+      }
       const room = getRoomById.get(roomId);
 
       if (!room || room.host_user_id !== userId) {
         json(response, 403, { error: "Only host can start the game." });
+        return;
+      }
+      if (room.status !== "waiting") {
+        json(response, 409, { error: "This room has already started." });
+        return;
+      }
+      if (countPlayers.get(room.id).count < 2) {
+        json(response, 409, { error: "At least two players are required." });
         return;
       }
       const domains = parseJson(room.domains_json, []);
@@ -1180,6 +1502,10 @@ const server = createServer(async (request, response) => {
       const questionIds = pickQuestions({ sections, domains, skills, count: room.question_count });
       if (!questionIds.length) {
         json(response, 400, { error: "No questions match this setup." });
+        return;
+      }
+      if (questionIds.length < room.question_count) {
+        json(response, 400, { error: `Only ${questionIds.length} questions match this setup. Choose fewer questions or a broader topic.` });
         return;
       }
       startRoomStatement.run(JSON.stringify(questionIds), new Date().toISOString(), room.id, userId);
@@ -1193,6 +1519,11 @@ const server = createServer(async (request, response) => {
       const userId = String(body.userId ?? "");
       const questionId = String(body.questionId ?? "");
       const elapsedMs = Math.max(0, Number(body.elapsedMs ?? 0));
+      if (usePostgres) {
+        const result = await answerArenaQuestionPg({ roomId, userId, questionId, elapsedMs, body });
+        json(response, result.status, result.payload);
+        return;
+      }
       const room = getRoomById.get(roomId);
       const player = room ? getPlayer.get(room.id, userId) : null;
       const question = questionById.get(questionId);
@@ -1276,12 +1607,14 @@ const server = createServer(async (request, response) => {
       const roomId = url.searchParams.get("roomId");
       const code = url.searchParams.get("code");
       const userId = url.searchParams.get("userId") ?? "";
-      const room = roomId ? getRoomById.get(roomId) : getRoomByCode.get(String(code ?? "").toUpperCase());
+      const room = usePostgres
+        ? await getArenaRoomPg({ roomId, code })
+        : roomId ? getRoomById.get(roomId) : getRoomByCode.get(String(code ?? "").toUpperCase());
       if (!room) {
         json(response, 404, { error: "Room not found." });
         return;
       }
-      json(response, 200, { room: publicRoom(room, userId) });
+      json(response, 200, { room: usePostgres ? await publicRoomPg(room, userId) : publicRoom(room, userId) });
       return;
     }
 

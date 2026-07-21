@@ -86,6 +86,8 @@ export type ArenaPlayer = {
   score: number;
   isHost: boolean;
   answeredCurrent: boolean;
+  progress: number;
+  finished: boolean;
 };
 
 export type ArenaRoom = {
